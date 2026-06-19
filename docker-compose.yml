@@ -25,7 +25,7 @@ services:
       context: ./quantwarden-ui-main
       dockerfile: Dockerfile
     container_name: quantwarden-db-init
-    command: ["npx", "prisma", "db", "push"]
+    command: ["npx", "prisma", "db", "push", "--accept-data-loss"]
     environment:
       DATABASE_URL: ${DATABASE_URL}
     depends_on:

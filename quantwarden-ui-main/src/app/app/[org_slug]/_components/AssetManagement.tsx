@@ -411,7 +411,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
   const [isStartingPortDiscovery, setIsStartingPortDiscovery] = useState(false);
 
   // === Discovery Queue ===
-  const [discoverQueue, setDiscoverQueue] = useState<string[]>([]);
+  const subdomainDiscoveryCompletionToastRef = useRef<string | null>(null);
 
   // === Search / View ===
   const [rootSearch, setRootSearch] = useState("");
@@ -493,6 +493,14 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
     Number(portDiscoveryProbeTimeoutMs) < 1 ||
     Number(portDiscoveryProbeTimeoutMs) > MAX_PORT_DISCOVERY_PROBE_TIMEOUT_MS;
   const activePortDiscoveryBatches = (activity?.activeBatches || []).filter((batch) => batch.engine === "portDiscovery");
+  const activeSubdomainDiscoveryBatches = (activity?.activeBatches || []).filter((batch) => batch.engine === "subdomainDiscovery");
+  const activeSubdomainDiscoveryAssetIds = new Set(
+    activeSubdomainDiscoveryBatches.flatMap((batch) =>
+      batch.items
+        .filter((item) => item.status === "pending" || item.status === "running")
+        .map((item) => item.assetId)
+    )
+  );
   const activePortDiscoveryAssetIds = new Set(
     activePortDiscoveryBatches.flatMap((batch) =>
       batch.items
@@ -1203,27 +1211,9 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
     fetch(`/api/orgs/assets?id=${id}&orgId=${org.id}`, { method: 'DELETE' }).catch(console.error);
   };
 
-  // === Queue Processor ===
-  useEffect(() => {
-    const activeCount = rootAssets.filter(a => a.scanning).length;
-    if (activeCount < 2 && discoverQueue.length > 0) {
-      const nextId = discoverQueue[0];
-      setDiscoverQueue(q => q.slice(1));
-      startDiscovery(nextId);
-    }
-  }, [discoverQueue, rootAssets]);
-
   const handleScanSubdomains = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (rootAssets.find(a => a.id === id)?.scanning) return;
-    const asset = rootAssets.find((a) => a.id === id);
-    setDiscoverQueue(q => q.includes(id) ? q : [...q, id]);
-    if (asset) {
-      toast.info("Subdomain discovery started.", {
-        description: `Scanning ${asset.value} for subdomains.`,
-        position: "bottom-right",
-      });
-    }
+    void startDiscovery(id);
   };
 
   const openDiscoveredAssetsModal = (
@@ -1235,9 +1225,8 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
 
   const showDiscoveryCompletionToast = (
     sourceValue: string,
-    discoveredAssets: Array<{ id: string; value: string; type: "domain" | "ip" | "unknown"; bucket: string; openPorts: AssetPort[] }>
+    discoveredCount: number,
   ) => {
-    const discoveredCount = discoveredAssets.length;
     toast.custom(
       (toastId) => (
         <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-white px-4 py-3 text-emerald-700 shadow-[0_18px_40px_rgba(15,23,42,0.12)]">
@@ -1250,18 +1239,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                 <p className="text-sm font-extrabold tracking-tight text-emerald-700">Subdomain discovery completed</p>
                 <p className="mt-1 text-sm leading-relaxed text-emerald-700/90">
                   <span className="font-semibold">{sourceValue}</span>
-                <span>: {discoveredCount} </span>
-                <button
-                  type="button"
-                  className="rounded-full px-2 py-0.5 font-bold text-[#7a0010] underline decoration-[#7a0010]/70 underline-offset-2 transition-colors hover:bg-[#7a0010]/8"
-                  onClick={() => {
-                    openDiscoveredAssetsModal(sourceValue, discoveredAssets);
-                    toast.dismiss(toastId);
-                  }}
-                >
-                  new
-                </button>
-                <span> discovered.</span>
+                  <span>: {discoveredCount} new discovered.</span>
                 </p>
               </div>
             </div>
@@ -1289,84 +1267,26 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
     );
   };
 
-  const startDiscovery = (id: string) => {
-    setRootAssets(prev => prev.map(a => a.id === id ? { ...a, scanning: true, statusMessage: "Initializing stream..." } : a));
-    
-    const es = new EventSource(`/api/orgs/discover?assetId=${id}&orgId=${org.id}`);
-    
-    es.addEventListener("status", (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        setRootAssets(prev => prev.map(a => a.id === id ? { ...a, statusMessage: data.message } : a));
-      } catch(err){}
-    });
+  const startDiscovery = async (id: string) => {
+    const asset = rootAssets.find((a) => a.id === id);
+    if (!asset || asset.scanning || activeSubdomainDiscoveryAssetIds.has(id)) return;
 
-    es.addEventListener("ping", (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        setRootAssets(prev => prev.map(a => a.id === id ? { ...a, statusMessage: data.message } : a));
-      } catch(err){}
-    });
+    setRootAssets(prev => prev.map(a => a.id === id ? { ...a, scanning: true, statusMessage: "Starting subdomain discovery..." } : a));
 
-    es.addEventListener("done", (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        const asset = rootAssets.find((a) => a.id === id);
-        if (data.subdomains && data.subdomains.length > 0) {
-          const discoveredAssets = data.subdomains.map((subAsset: any) => ({
-            id: subAsset.id,
-            value: subAsset.value,
-            type: getAssetType(subAsset.value),
-            bucket: normalizeAssetBucket(subAsset.bucket || inferAssetBucket(subAsset.value)),
-            openPorts: parseOpenPorts(subAsset.openPorts),
-          }));
-          setLeafAssets(prev => {
-             const existing = new Set(prev.map(p => p.value));
-             const newLeafs = data.subdomains
-               .filter((s:any) => !existing.has(s.value))
-               .map((s: any) => ({
-                 ...s,
-                 type: getAssetType(s.value),
-                 bucket: normalizeAssetBucket(s.bucket || inferAssetBucket(s.value)),
-                 openPorts: parseOpenPorts(s.openPorts),
-               }));
-             return [...prev, ...newLeafs];
-          });
-          setRootAssets(prev => prev.map(a => a.id === id ? { 
-            ...a, 
-            scanning: false, 
-            statusMessage: "", 
-            subdomains: Array.from(new Set([...a.subdomains, ...data.subdomains.map((s:any)=>s.value)]))
-          } : a));
-          showDiscoveryCompletionToast(asset?.value || "Asset", discoveredAssets);
-        } else {
-          setRootAssets(prev => prev.map(a => a.id === id ? { ...a, scanning: false, statusMessage: "No subdomains found" } : a));
-          showDiscoveryCompletionToast(asset?.value || "Asset", []);
-          setTimeout(() => {
-            setRootAssets(prev => prev.map(a => a.id === id ? { ...a, statusMessage: "" } : a));
-          }, 5000);
-        }
-      } catch(err) {
-        setRootAssets(prev => prev.map(a => a.id === id ? { ...a, scanning: false, statusMessage: "" } : a));
+    try {
+      const result = await createBatch({
+        engine: "subdomainDiscovery",
+        type: "single",
+        assetIds: [id],
+      });
+
+      if (!result.ok) {
+        throw new Error(result.error || "Failed to start subdomain discovery.");
       }
-      es.close();
-    });
-
-    es.addEventListener("error", (e) => {
-      let msg = "Connection error";
-      let code = "";
-      try { 
-        const d = JSON.parse((e as unknown as MessageEvent).data); 
-        if(d.message) msg = d.message; 
-        if (d.code) code = d.code;
-      } catch (err) {}
-      
-      setRootAssets(prev => prev.map(a => a.id === id ? { ...a, scanning: false, statusMessage: msg } : a));
-
-      const serviceDown =
-        code === "SUBFINDER_UNAVAILABLE" ||
-        /subfinder failed|fetch failed|connection refused|service unavailable|econnrefused|enotfound/i.test(msg);
-
+    } catch (error) {
+      setRootAssets(prev => prev.map(a => a.id === id ? { ...a, scanning: false, statusMessage: "" } : a));
+      const msg = error instanceof Error ? error.message : "Subdomain discovery failed.";
+      const serviceDown = /subfinder failed|fetch failed|connection refused|service unavailable|econnrefused|enotfound/i.test(msg);
       if (serviceDown) {
         toast.error("Subdomain discovery is unavailable.", {
           description: "The Subfinder server appears to be down. Please contact support to turn on the Subfinder server.",
@@ -1378,13 +1298,30 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
           position: "bottom-right",
         });
       }
+    }
+  };
 
-      setTimeout(() => {
-        setRootAssets(prev => prev.map(a => a.id === id ? { ...a, statusMessage: "" } : a));
-      }, 5000);
-      
-      es.close();
-    });
+  const startDiscoveryAll = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    setRootAssets(prev => prev.map(a => ids.includes(a.id) ? { ...a, scanning: true, statusMessage: "Starting subdomain discovery..." } : a));
+
+    try {
+      const result = await createBatch({
+        engine: "subdomainDiscovery",
+        type: ids.length > 1 ? "group" : "single",
+        assetIds: ids,
+      });
+
+      if (!result.ok) {
+        throw new Error(result.error || "Failed to start subdomain discovery.");
+      }
+    } catch (error) {
+      setRootAssets(prev => prev.map(a => ids.includes(a.id) ? { ...a, scanning: false, statusMessage: "" } : a));
+      toast.error("Subdomain discovery could not be started.", {
+        description: error instanceof Error ? error.message : "Please try again.",
+        position: "bottom-right",
+      });
+    }
   };
 
   // === Background Sync ===
@@ -1392,7 +1329,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
     const interval = setInterval(() => {
       let shouldPoll = false;
       setRootAssets(prev => {
-        shouldPoll = prev.some(a => a.scanning) || activePortDiscoveryBatches.length > 0;
+        shouldPoll = prev.some(a => a.scanning) || activePortDiscoveryBatches.length > 0 || activeSubdomainDiscoveryBatches.length > 0;
         return prev;
       });
 
@@ -1402,7 +1339,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [activePortDiscoveryBatches.length, fetchAssets, org.id]);
+  }, [activePortDiscoveryBatches.length, activeSubdomainDiscoveryBatches.length, fetchAssets, org.id]);
 
   // === Filtered lists ===
   const filteredRoot = rootAssets.filter((a) =>
@@ -1416,10 +1353,10 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
       a.bucket.toLowerCase().includes(leafSearch.toLowerCase()))
   );
   const discoverableRootDomains = rootAssets.filter(
-    (asset) => asset.type === "domain" && !asset.scanning && !discoverQueue.includes(asset.id)
+    (asset) => asset.type === "domain" && !asset.scanning && !activeSubdomainDiscoveryAssetIds.has(asset.id)
   );
   const bulkDiscoveryInProgress = rootAssets.some(
-    (asset) => asset.type === "domain" && (asset.scanning || discoverQueue.includes(asset.id))
+    (asset) => asset.type === "domain" && (asset.scanning || activeSubdomainDiscoveryAssetIds.has(asset.id))
   );
 
   useEffect(() => {
@@ -1461,6 +1398,48 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
 
     void fetchAssets();
   }, [activity?.latestCompletedBatch, fetchAssets]);
+
+  // === Subdomain discovery: completion + active-batch refresh ===
+  useEffect(() => {
+    const latestCompletedSubdomainBatch =
+      activity?.latestCompletedBatch?.engine === "subdomainDiscovery" ? activity.latestCompletedBatch : null;
+
+    if (!latestCompletedSubdomainBatch) return;
+    if (subdomainDiscoveryCompletionToastRef.current === latestCompletedSubdomainBatch.id) return;
+
+    subdomainDiscoveryCompletionToastRef.current = latestCompletedSubdomainBatch.id;
+
+    const scannedAssetIds = new Set(latestCompletedSubdomainBatch.items.map((item) => item.assetId));
+    const totalDiscovered = latestCompletedSubdomainBatch.items.reduce(
+      (sum, item) => sum + (item.newCount ?? item.discoveredCount ?? 0),
+      0
+    );
+
+    setRootAssets(prev => prev.map(a => scannedAssetIds.has(a.id) ? { ...a, scanning: false, statusMessage: "" } : a));
+
+    if (latestCompletedSubdomainBatch.status === "completed") {
+      const sourceValues = rootAssets
+        .filter((a) => scannedAssetIds.has(a.id))
+        .map((a) => a.value);
+      showDiscoveryCompletionToast(sourceValues.join(", ") || "Asset", totalDiscovered);
+    } else if (latestCompletedSubdomainBatch.status === "failed") {
+      toast.error("Subdomain discovery finished with issues.", {
+        description: "Check the activity monitor for errors.",
+        position: "bottom-right",
+      });
+    }
+
+    void fetchAssets();
+  }, [activity?.latestCompletedBatch, fetchAssets, rootAssets]);
+
+  useEffect(() => {
+    const signature = activeSubdomainDiscoveryBatches
+      .map((batch) => `${batch.id}:${batch.status}:${batch.percentComplete}`)
+      .join("|");
+
+    if (!signature) return;
+    void fetchAssets();
+  }, [activeSubdomainDiscoveryBatches, fetchAssets]);
 
   // === Render Asset Row (Root) ===
   const renderRootAssetRow = (asset: typeof rootAssets[0]) => {
@@ -1557,10 +1536,10 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
             <ActionTooltip content="Discover subdomains">
               <button
                 onClick={(e) => handleScanSubdomains(asset.id, e)}
-                disabled={asset.scanning || discoverQueue.includes(asset.id)}
+                disabled={asset.scanning || activeSubdomainDiscoveryAssetIds.has(asset.id)}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#8B0000]/20 bg-white text-[#8B0000] opacity-0 transition-all hover:bg-[#8B0000]/8 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-50 cursor-pointer"
               >
-                {asset.scanning || discoverQueue.includes(asset.id) ? (
+                {asset.scanning || activeSubdomainDiscoveryAssetIds.has(asset.id) ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
                 ) : (
                   <Network className="w-3.5 h-3.5" />
@@ -1841,7 +1820,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                     <button
                       type="button"
                       onClick={() => {
-                        discoverableRootDomains.forEach(a => handleScanSubdomains(a.id));
+                        void startDiscoveryAll(discoverableRootDomains.map(a => a.id));
                       }}
                       disabled={discoverableRootDomains.length === 0 || bulkDiscoveryInProgress}
                       className="inline-flex whitespace-nowrap items-center justify-center gap-2 rounded-full bg-[#8B0000] px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-[#730000] disabled:cursor-not-allowed disabled:opacity-50"
@@ -1877,8 +1856,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                   <div className="flex items-center gap-3 text-[10px] font-semibold uppercase tracking-wider text-[#8a5d33]/70">
                     <span className="flex items-center gap-1.5">
                       <Clock className="h-3 w-3" />
-                      {rootAssets.filter(a => a.scanning).length} Active
-                      {discoverQueue.length > 0 && <span className="text-[#8B0000]">{discoverQueue.length} Queued</span>}
+                      {rootAssets.filter(a => a.scanning || activeSubdomainDiscoveryAssetIds.has(a.id)).length} Active
                     </span>
                   </div>
                 )}

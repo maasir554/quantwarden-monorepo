@@ -629,19 +629,17 @@ export default function AssetIntelligenceClient({
     setIsDiscovering(true);
 
     try {
-      const streamUrl = `/api/orgs/discover?assetId=${encodeURIComponent(asset.id)}&orgId=${encodeURIComponent(org.id)}`;
-      const eventSource = new EventSource(streamUrl);
-
-      eventSource.addEventListener("done", () => {
-        eventSource.close();
-        setIsDiscovering(false);
-        router.push(`/app/${org.slug}/asset`);
+      const result = await createBatch({
+        engine: "subdomainDiscovery",
+        type: "single",
+        assetIds: [asset.id],
       });
 
-      eventSource.addEventListener("error", () => {
-        eventSource.close();
-        setIsDiscovering(false);
-      });
+      if (!result.ok) {
+        throw new Error(result.error || "Failed to start subdomain discovery.");
+      }
+
+      router.push(`/app/${org.slug}/asset`);
     } catch (error) {
       console.error(error);
       setIsDiscovering(false);
