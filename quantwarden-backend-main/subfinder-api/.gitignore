@@ -1,0 +1,27 @@
+# Build outputs
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Vendored deps
+vendor/
+
+# Coverage and profiling
+coverage/
+*.prof
+
+# IDE/editor
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# environment 
+.env
+provider-config.yaml

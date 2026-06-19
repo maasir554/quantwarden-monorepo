@@ -1,0 +1,21 @@
+services:
+  quantwarden-scan-worker:
+    build:
+      context: ..
+      dockerfile: worker/Dockerfile
+    image: quantwarden-scan-worker:latest
+    container_name: quantwarden-scan-worker
+    restart: unless-stopped
+    ports:
+      - "${SCAN_WORKER_PORT:-8088}:${SCAN_WORKER_PORT:-8088}"
+      - "${SCAN_WORKER_HEALTH_PORT:-8089}:${SCAN_WORKER_HEALTH_PORT:-8089}"
+    env_file:
+      - ../.env.worker
+    environment:
+      NODE_ENV: production
+      SCAN_WORKER_ACTIVE_EXECUTOR_TICK_MS: ${SCAN_WORKER_ACTIVE_EXECUTOR_TICK_MS:-1500}
+      SCAN_WORKER_ACTIVE_SCHEDULER_TICK_MS: ${SCAN_WORKER_ACTIVE_SCHEDULER_TICK_MS:-10000}
+      SCAN_WORKER_IDLE_EXECUTOR_TICK_MS: ${SCAN_WORKER_IDLE_EXECUTOR_TICK_MS:-1800000}
+      SCAN_WORKER_IDLE_SCHEDULER_TICK_MS: ${SCAN_WORKER_IDLE_SCHEDULER_TICK_MS:-1800000}
+      SCAN_WORKER_ACTIVE_GRACE_MS: ${SCAN_WORKER_ACTIVE_GRACE_MS:-60000}
+      SCAN_WORKER_ACTIVE_ORG_LIMIT: ${SCAN_WORKER_ACTIVE_ORG_LIMIT:-100}

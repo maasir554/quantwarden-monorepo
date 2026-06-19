@@ -1,0 +1,23 @@
+{
+  "servers": {
+    "quantwarden-monorepo": {
+      "command": "/Users/maasir/Projects/quantwarden-backend/mcp-monorepo-server/.venv/bin/python",
+      "args": [
+        "/Users/maasir/Projects/quantwarden-backend/mcp-monorepo-server/server.py"
+      ],
+      "env": {
+        "ONEFORALL_API_URL": "http://127.0.0.1:8002",
+        "SUBFINDER_API_URL": "http://127.0.0.1:8085",
+        "PYSSL_API_URL": "http://127.0.0.1:8000",
+        "NMAP_API_URL": "http://127.0.0.1:8010"
+      }
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": [
+        "shadcn@latest",
+        "mcp"
+      ]
+    }
+  }
+}

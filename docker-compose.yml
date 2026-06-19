@@ -1,0 +1,178 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: quantwarden-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-quantwarden}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quantwarden_password}
+      POSTGRES_DB: ${POSTGRES_DB:-quantwarden}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quantwarden} -d ${POSTGRES_DB:-quantwarden}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # One-shot schema provisioning. Creates/updates all tables from
+  # prisma/schema.prisma on a fresh database, then exits. The app and worker
+  # wait for this to finish so they never query a database without a schema.
+  db-init:
+    build:
+      context: ./quantwarden-ui-main
+      dockerfile: Dockerfile
+    container_name: quantwarden-db-init
+    command: ["npx", "prisma", "db", "push"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  quantwarden-ui:
+    build:
+      context: ./quantwarden-ui-main
+      dockerfile: Dockerfile
+    container_name: quantwarden-ui
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      # Email (optional). Defaults below point at the bundled Mailpit container.
+      # Point SMTP_HOST at an internal relay for production, or unset it to run
+      # guest-only (username + password) with no email at all.
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-QuantWarden <no-reply@quantwarden.local>}
+      # Guest (email-free) accounts
+      GUEST_AUTH_ENABLED: ${GUEST_AUTH_ENABLED:-true}
+      GUEST_EMAIL_DOMAIN: ${GUEST_EMAIL_DOMAIN:-guest.local}
+      OPENSSL_API_URL: ${OPENSSL_API_URL}
+      NMAP_API_URL: ${NMAP_API_URL}
+      SUBFINDER_API_URL: ${SUBFINDER_API_URL}
+      SCAN_WORKER_WAKE_URL: ${SCAN_WORKER_WAKE_URL}
+      SCAN_WORKER_WAKE_SECRET: ${SCAN_WORKER_WAKE_SECRET}
+    depends_on:
+      db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Local SMTP catcher for demos: captures every email and shows it in a web UI
+  # at http://localhost:8025 — no real mail server or credentials needed.
+  # Remove this service (and unset SMTP_HOST) to run the stack guest-only.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: quantwarden-mailpit
+    ports:
+      - "8025:8025"   # web UI
+      - "1025:1025"   # SMTP
+    restart: unless-stopped
+
+  quantwarden-worker:
+    build:
+      context: ./quantwarden-ui-main
+      dockerfile: worker/Dockerfile
+    container_name: quantwarden-worker
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      OPENSSL_API_URL: ${OPENSSL_API_URL}
+      NMAP_API_URL: ${NMAP_API_URL}
+      SUBFINDER_API_URL: ${SUBFINDER_API_URL}
+      SCAN_WORKER_PORT: ${SCAN_WORKER_PORT}
+      SCAN_WORKER_HEALTH_PORT: ${SCAN_WORKER_HEALTH_PORT}
+      SCAN_WORKER_WAKE_SECRET: ${SCAN_WORKER_WAKE_SECRET}
+      SCAN_WORKER_ACTIVE_EXECUTOR_TICK_MS: ${SCAN_WORKER_ACTIVE_EXECUTOR_TICK_MS}
+      SCAN_WORKER_ACTIVE_SCHEDULER_TICK_MS: ${SCAN_WORKER_ACTIVE_SCHEDULER_TICK_MS}
+    ports:
+      - "${SCAN_WORKER_PORT:-8088}:${SCAN_WORKER_PORT:-8088}"
+      - "${SCAN_WORKER_HEALTH_PORT:-8089}:${SCAN_WORKER_HEALTH_PORT:-8089}"
+    depends_on:
+      db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  subfinder-api:
+    build:
+      context: ./quantwarden-backend-main/subfinder-api
+    container_name: quantwarden-subfinder-api
+    environment:
+      SUBFINDER_API_ADDR: ":8085"
+      ONEFORALL_API_URL: "http://oneforall-api:8002"
+      FB_APP_ID: ${FB_APP_ID}
+      FB_APP_SECRET: ${FB_APP_SECRET}
+      VT_API_KEY: ${VT_API_KEY}
+      SPYSE_API_TOKEN: ${SPYSE_API_TOKEN}
+    depends_on:
+      - oneforall-api
+    ports:
+      - "${SUBFINDER_PORT:-8085}:8085"
+    restart: unless-stopped
+
+  pyssl-api:
+    build:
+      context: ./quantwarden-backend-main/pyssl-api
+    container_name: quantwarden-pyssl-api
+    ports:
+      - "${PYSSL_PORT:-8000}:8000"
+    restart: unless-stopped
+
+  nmap-api:
+    build:
+      context: ./quantwarden-backend-main/nmap-api
+    container_name: quantwarden-nmap-api
+    ports:
+      - "${NMAP_PORT:-8010}:8010"
+    restart: unless-stopped
+
+  openssl-api:
+    build:
+      context: ./quantwarden-backend-main/openssl-api
+    container_name: quantwarden-openssl-api
+    ports:
+      - "${OPENSSL_PORT:-8020}:8020"
+    restart: unless-stopped
+
+  mcp-monorepo-server:
+    build:
+      context: ./quantwarden-backend-main/mcp-monorepo-server
+    container_name: quantwarden-mcp-server
+    environment:
+      ONEFORALL_API_URL: "http://oneforall-api:8002"
+      SUBFINDER_API_URL: "http://subfinder-api:8085"
+      PYSSL_API_URL: "http://pyssl-api:8000"
+      NMAP_API_URL: "http://nmap-api:8010"
+      OPENSSL_API_URL: "http://openssl-api:8020"
+    depends_on:
+      - subfinder-api
+      - pyssl-api
+      - nmap-api
+      - openssl-api
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+  oneforall-api:
+    build:
+      context: ./quantwarden-backend-main/one-for-all-subdomains
+      dockerfile: Dockerfile.api
+    container_name: quantwarden-oneforall-api
+    ports:
+      - "${ONEFORALL_PORT:-8002}:8002"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

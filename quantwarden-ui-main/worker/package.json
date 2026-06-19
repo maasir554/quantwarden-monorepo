@@ -1,0 +1,6 @@
+{
+  "name": "quantwarden-scan-worker",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Background scan scheduler and executor for QuantWarden."
+}
