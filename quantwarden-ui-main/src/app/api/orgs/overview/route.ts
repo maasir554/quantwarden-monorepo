@@ -97,6 +97,23 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    let initialScanPending = false;
+    try {
+      const workflowRows = await prisma.$queryRawUnsafe<Array<{ pending: boolean }>>(
+        `SELECT EXISTS (
+           SELECT 1
+             FROM "org_scan_workflow"
+            WHERE "organizationId" = $1
+              AND "workflowType" = 'onboarding'
+              AND status IN ('pending', 'running')
+         ) as pending`,
+        orgId
+      );
+      initialScanPending = Boolean(workflowRows[0]?.pending);
+    } catch {
+      // Older databases may not have the workflow table until the worker starts.
+    }
+
     const assetTypesRows = await prisma.$queryRawUnsafe<Array<{ type: string; isRoot: boolean }>>(
       `SELECT type, "isRoot"
          FROM "asset"
@@ -484,6 +501,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       totalAssets,
+      initialScanPending,
       discovery: { domains, subdomains, ips, cloud },
       totalScanned,
       reachableTlsEndpointCount,

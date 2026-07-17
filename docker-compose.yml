@@ -37,6 +37,8 @@ services:
     build:
       context: ./quantwarden-ui-main
       dockerfile: Dockerfile
+      args:
+        EMAIL_AUTH_ENABLED: ${EMAIL_AUTH_ENABLED:-false}
     container_name: quantwarden-ui
     ports:
       - "3000:3000"
@@ -45,18 +47,16 @@ services:
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
-      # Email (optional). Defaults below point at the bundled Mailpit container.
-      # Point SMTP_HOST at an internal relay for production, or unset it to run
-      # guest-only (username + password) with no email at all.
+      # Username auth is the default. Email auth is an explicit build/deploy opt-in.
+      USERNAME_AUTH_ENABLED: ${USERNAME_AUTH_ENABLED:-true}
+      USERNAME_EMAIL_DOMAIN: ${USERNAME_EMAIL_DOMAIN:-guest.local}
+      EMAIL_AUTH_ENABLED: ${EMAIL_AUTH_ENABLED:-false}
       SMTP_HOST: ${SMTP_HOST:-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-QuantWarden <no-reply@quantwarden.local>}
-      # Guest (email-free) accounts
-      GUEST_AUTH_ENABLED: ${GUEST_AUTH_ENABLED:-true}
-      GUEST_EMAIL_DOMAIN: ${GUEST_EMAIL_DOMAIN:-guest.local}
       OPENSSL_API_URL: ${OPENSSL_API_URL}
       NMAP_API_URL: ${NMAP_API_URL}
       SUBFINDER_API_URL: ${SUBFINDER_API_URL}
@@ -71,7 +71,7 @@ services:
 
   # Local SMTP catcher for demos: captures every email and shows it in a web UI
   # at http://localhost:8025 — no real mail server or credentials needed.
-  # Remove this service (and unset SMTP_HOST) to run the stack guest-only.
+  # Optional local inbox. It does not enable email auth by itself.
   mailpit:
     image: axllent/mailpit:latest
     container_name: quantwarden-mailpit

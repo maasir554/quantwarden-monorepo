@@ -23,6 +23,7 @@ import ScanActivityMonitor from "./ScanActivityMonitor";
 import OrgCbom from "./OrgCbom";
 import PqcPosture from "./PqcPosture";
 import AssetGraphViewer from "./AssetGraphViewer";
+import { OnboardingScanStatus } from "./OnboardingScanStatus";
 
 interface OrgDashboardProps {
   org: any;
@@ -151,6 +152,9 @@ export default function OrgDashboard({ org, currentUserRole, currentUserId, acti
       {/* Main Content Area */}
       <main className="relative z-10 lg:ml-72 h-full overflow-y-auto flex flex-col">
         <div className="w-full min-h-full px-4 sm:px-5 lg:px-6 py-4 sm:py-5 flex flex-col">
+          {(["overview", "discoveries", "asset"] as DashboardSection[]).includes(activeSection) && (
+            <OnboardingScanStatus orgId={org.id} orgSlug={org.slug} />
+          )}
           {activeSection === "overview" && (
             <OrgOverview
               org={org}

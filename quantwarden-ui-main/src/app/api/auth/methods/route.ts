@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
-import { isEmailConfigured } from "@/lib/mailer";
+import { isEmailAuthEnabled } from "@/lib/mailer";
 import { guestEmailDomain, isGuestAuthEnabled } from "@/lib/guest-auth";
 
 /**
  * Public endpoint telling the login/signup UI which auth methods this
  * deployment offers. Single server-side source of truth so the client never
- * has to guess whether SMTP is configured. guestDomain lets the UI recognize a
- * guest invitation (its synthetic email ends with @<guestDomain>).
+ * has to guess how the deployment was configured. usernameDomain lets the UI
+ * recognize a username invitation backed by a synthetic email.
  */
 export async function GET() {
   return NextResponse.json({
-    email: isEmailConfigured(),
-    guest: isGuestAuthEnabled(),
-    guestDomain: guestEmailDomain(),
+    email: isEmailAuthEnabled(),
+    username: isGuestAuthEnabled(),
+    usernameDomain: guestEmailDomain(),
   });
 }

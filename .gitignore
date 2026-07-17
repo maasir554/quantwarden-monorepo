@@ -67,3 +67,5 @@ quantwarden-ui-main/domains.txt
 quantwarden-ui-main/subs.txt
 quantwarden-ui-main/scratch_test_insert.ts
 quantwarden-ui-main/.agents/SCAN_DATA.json
+
+*.zip

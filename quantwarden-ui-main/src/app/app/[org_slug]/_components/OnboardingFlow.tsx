@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Loader2, ArrowRight, ArrowLeft, Globe, Lock, Search, EyeOff, Plus, Trash2, Mail, Check, Copy, Info, ChevronDown, ChevronLeft, ChevronRight, Send, XCircle, CheckCircle2, Clock } from "lucide-react";
+import { Loader2, ArrowRight, ArrowLeft, Globe, Lock, Search, EyeOff, Plus, Trash2, Mail, User, Check, Copy, Info, ChevronDown, ChevronLeft, ChevronRight, Send, XCircle, CheckCircle2, Clock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getRoleStyle } from "@/lib/utils";
 
@@ -159,6 +159,21 @@ export default function OnboardingFlow({ org }: { org: any }) {
   const [sentInvites, setSentInvites] = useState<any[]>([]);
   const [currentInvite, setCurrentInvite] = useState("");
   const [isSendingInvites, setIsSendingInvites] = useState(false);
+  const [emailAuthEnabled, setEmailAuthEnabled] = useState(false);
+  const [usernameDomain, setUsernameDomain] = useState("guest.local");
+
+  useEffect(() => {
+    fetch("/api/auth/methods")
+      .then((res) => res.json())
+      .then((methods) => {
+        setEmailAuthEnabled(Boolean(methods.email));
+        if (methods.usernameDomain) setUsernameDomain(String(methods.usernameDomain));
+      })
+      .catch(() => {
+        setEmailAuthEnabled(false);
+        setUsernameDomain("guest.local");
+      });
+  }, []);
 
   useEffect(() => {
     if (step === 4) {
@@ -350,23 +365,30 @@ export default function OnboardingFlow({ org }: { org: any }) {
     if (!currentInvite.trim()) return;
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const splitEmails = currentInvite
+    const usernameRegex = /^[a-z0-9_.-]{3,32}$/;
+    const identifiers = currentInvite
       .split(/[\s,]+/)
       .map(e => e.trim().toLowerCase())
-      .filter(e => e.length > 0 && emailRegex.test(e));
+      .filter(e => e.length > 0 && (usernameRegex.test(e) || (emailAuthEnabled && emailRegex.test(e))));
 
-    if (splitEmails.length === 0) return;
+    if (identifiers.length === 0) {
+      setError(emailAuthEnabled
+        ? "Enter a valid username or email address."
+        : "Enter a valid username using letters, numbers, dots, underscores, or hyphens.");
+      return;
+    }
 
     // Pick a sensible default role (e.g. Analyst or Member or the first role available)
     const defaultRoleId = roles.find(r => r.name.toLowerCase() === "analyst")?.id || roles[0]?.id || "";
 
-    const newInvitesToAdd = splitEmails
-      .filter(email => !invites.some(inv => inv.email === email))
-      .map(email => ({ email, roleId: defaultRoleId }));
+    const newInvitesToAdd = identifiers
+      .filter(identifier => !invites.some(inv => inv.email === identifier))
+      .map(identifier => ({ email: identifier, roleId: defaultRoleId }));
 
     if (newInvitesToAdd.length > 0) {
       setInvites([...invites, ...newInvitesToAdd]);
     }
+    setError("");
     setCurrentInvite("");
   };
 
@@ -400,9 +422,11 @@ export default function OnboardingFlow({ org }: { org: any }) {
       });
 
       if (res.ok) {
+        const result = await res.json();
         const fetchRes = await fetch(`/api/orgs/invite?orgId=${org.id}`);
         if (fetchRes.ok) setSentInvites(await fetchRes.json());
         setInvites([]);
+        if (result.warnings?.length) setError(result.warnings.join(" "));
       } else {
         const errData = await res.json();
         setError(errData.error || "Failed to send invitations.");
@@ -412,6 +436,11 @@ export default function OnboardingFlow({ org }: { org: any }) {
     }
     
     setIsSendingInvites(false);
+  };
+
+  const displayInviteIdentifier = (value: string) => {
+    const suffix = `@${usernameDomain.toLowerCase()}`;
+    return value.toLowerCase().endsWith(suffix) ? value.slice(0, -suffix.length) : value;
   };
 
   const handleDeleteSentInvite = async (inviteId: string) => {
@@ -432,7 +461,12 @@ export default function OnboardingFlow({ org }: { org: any }) {
     setError("");
 
     try {
-      await autoSave({ discoverable: visibility === "public", isPublic: approval === "public", setupComplete: true });
+      await autoSave({
+        discoverable: visibility === "public",
+        isPublic: approval === "public",
+        roles,
+        setupComplete: true,
+      });
       localStorage.removeItem(`onboard_step_${org.id}`);
       localStorage.removeItem(`onboard_max_${org.id}`);
       router.push(`/app/${org.slug}`);
@@ -880,7 +914,7 @@ export default function OnboardingFlow({ org }: { org: any }) {
                   type="text"
                   value={currentInvite}
                   onChange={(e) => setCurrentInvite(e.target.value)}
-                  placeholder="name@company.com, ceo@company.com"
+                  placeholder={emailAuthEnabled ? "username or name@company.com" : "colleague-username"}
                   className="flex-1 bg-white border border-amber-500/30 rounded-xl px-4 py-3 text-[#3d200a] placeholder:text-[#8a5d33]/50 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/50 transition-all shadow-sm"
                 />
                 <button
@@ -892,7 +926,9 @@ export default function OnboardingFlow({ org }: { org: any }) {
                 </button>
               </form>
               <p className="text-xs text-[#8a5d33]/70 font-medium px-1">
-                You can add multiple emails at once. Separate them with spaces, commas, or newlines.
+                {emailAuthEnabled
+                  ? "Add usernames or email addresses. Separate multiple entries with spaces, commas, or newlines."
+                  : "Add one or more usernames. Separate multiple entries with spaces, commas, or newlines."}
               </p>
 
               {invites.length > 0 && (
@@ -901,7 +937,7 @@ export default function OnboardingFlow({ org }: { org: any }) {
                     <table className="w-full text-left font-medium">
                       <thead className="bg-[#fdf1df]">
                         <tr>
-                          <th className="py-2.5 px-4 text-[#8a5d33] text-[10px] uppercase tracking-wider font-bold">Email</th>
+                          <th className="py-2.5 px-4 text-[#8a5d33] text-[10px] uppercase tracking-wider font-bold">Username or Email</th>
                           <th className="py-2.5 px-4 text-right text-[#8a5d33] text-[10px] uppercase tracking-wider font-bold">Role</th>
                         </tr>
                       </thead>
@@ -909,7 +945,9 @@ export default function OnboardingFlow({ org }: { org: any }) {
                         {invites.map((inv, index) => (
                           <tr key={inv.email} className={`hover:bg-amber-500/5 transition-colors`}>
                             <td className="py-3 px-4 flex items-center gap-3">
-                              <Mail className="w-4 h-4 text-amber-500/50" />
+                              {inv.email.includes("@")
+                                ? <Mail className="w-4 h-4 text-amber-500/50" />
+                                : <User className="w-4 h-4 text-amber-500/50" />}
                               <span className="text-[#3d200a] text-sm font-semibold">{inv.email}</span>
                             </td>
                             <td className="py-2 px-2 text-right">
@@ -959,7 +997,7 @@ export default function OnboardingFlow({ org }: { org: any }) {
                     <table className="w-full text-left font-medium">
                       <thead className="bg-[#f0e8db]">
                         <tr>
-                          <th className="py-2.5 px-4 text-[#8a5d33] text-[10px] uppercase tracking-wider font-bold">Email</th>
+                          <th className="py-2.5 px-4 text-[#8a5d33] text-[10px] uppercase tracking-wider font-bold">Invitee</th>
                           <th className="py-2.5 px-4 text-[#8a5d33] text-[10px] uppercase tracking-wider font-bold hidden sm:table-cell">Role</th>
                           <th className="py-2.5 px-4 text-right text-[#8a5d33] text-[10px] uppercase tracking-wider font-bold">Status</th>
                         </tr>
@@ -968,7 +1006,10 @@ export default function OnboardingFlow({ org }: { org: any }) {
                         {sentInvites.map((inv) => (
                           <tr key={inv.id} className="hover:bg-amber-500/5 transition-colors">
                             <td className="py-3 px-4 flex items-center gap-3">
-                              <span className="text-[#3d200a] text-sm font-semibold">{inv.email}</span>
+                              {inv.email.toLowerCase().endsWith(`@${usernameDomain.toLowerCase()}`)
+                                ? <User className="w-4 h-4 text-amber-500/50" />
+                                : <Mail className="w-4 h-4 text-amber-500/50" />}
+                              <span className="text-[#3d200a] text-sm font-semibold">{displayInviteIdentifier(inv.email)}</span>
                             </td>
                             <td className="py-3 px-4 hidden sm:table-cell">
                               <span 

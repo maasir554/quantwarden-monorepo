@@ -49,6 +49,17 @@ npm run dev
 
 For local app development, use your normal root `.env` or `.env.local`.
 
+Authentication defaults to username/password:
+
+```env
+USERNAME_AUTH_ENABLED=true
+USERNAME_EMAIL_DOMAIN=guest.local
+EMAIL_AUTH_ENABLED=false
+```
+
+To add email OTP/magic-link sign-in, set `EMAIL_AUTH_ENABLED=true` and configure
+`SMTP_HOST`, `SMTP_PORT`, and the optional SMTP credentials before rebuilding.
+
 For the deployed app on Vercel, set:
 
 ```env

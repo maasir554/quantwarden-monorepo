@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheck, Info, Loader2, AlertTriangle, CheckCircle, Search, Server, X, Telescope } from "lucide-react";
 import { PqcAssessment } from "@/lib/pqc-scoring";
 import { PqcMethodologyModal } from "./PqcMethodologyModal";
+import { FirstScanAnalysisNotice } from "./OnboardingScanStatus";
 
 function PqcGauge({ score }: { score: number }) {
   const pointerAngle = Math.max(-90, Math.min(90, -90 + (score / 100) * 180));
@@ -105,6 +106,33 @@ export default function PqcPosture({ org }: PqcPostureProps) {
   }
 
   const { organization, assets } = data;
+  if (organization.totalPortsScored === 0 || data.initialScanPending) {
+    return (
+      <div className="w-full max-w-6xl mx-auto space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-black text-[#3d200a] flex items-center gap-2">
+              <ShieldCheck className="h-6 w-6 text-[#8B0000]" />
+              Post-Quantum Cryptography (PQC) Posture
+            </h1>
+            <p className="text-[#8a5d33]/70 mt-1 text-xs font-semibold">
+              PQC scoring begins after the initial asset, port, and TLS discovery workflow completes.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowInfoModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-950 to-[#8B0000] rounded-full text-xs font-bold text-white hover:opacity-90 transition shadow-sm"
+          >
+            <Info className="h-3.5 w-3.5" />
+            Scoring Methodology
+          </button>
+        </div>
+        <FirstScanAnalysisNotice orgId={org.id} orgSlug={org.slug} area="pqc" />
+        <PqcMethodologyModal isOpen={showInfoModal} onClose={() => setShowInfoModal(false)} />
+      </div>
+    );
+  }
+
   const filteredAssets = assets.filter((a: any) => {
     const matchesSearch = a.value.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTier = tierFilter === "ALL" || a.tier === tierFilter;

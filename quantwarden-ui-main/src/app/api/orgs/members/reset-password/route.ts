@@ -6,9 +6,9 @@ import { headers } from "next/headers";
 import { validatePassword } from "@/lib/guest-auth";
 
 /**
- * Org-admin password reset for guest (username + password) members.
+ * Org-admin password reset for username + password members.
  *
- * There is no email in guest mode, so recovery is handled by an org admin with
+ * There is no recovery email, so recovery is handled by an org admin with
  * team-management permission. They set a new password and share it out-of-band.
  * Reuses the same RBAC gate as team invites (canManageTeam).
  */
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     );
     if (!targetRows[0]?.username || credentialRows.length === 0) {
       return NextResponse.json(
-        { error: "This member does not use a password (guest) account, so there is nothing to reset." },
+        { error: "This member does not use a username/password account, so there is nothing to reset." },
         { status: 400 }
       );
     }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isEmailAuthEnabled } from "@/lib/mailer";
 
 function buildToken() {
   return `${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "")}`;
@@ -55,6 +56,10 @@ function splitSetCookieHeader(setCookie: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!isEmailAuthEnabled()) {
+      return NextResponse.json({ error: "Email sign-up is disabled. Ask for a username invitation." }, { status: 403 });
+    }
+
     const body = await req.json();
     const inviteId = typeof body.inviteId === "string" ? body.inviteId : "";
     const name = typeof body.name === "string" ? body.name.trim() : "";

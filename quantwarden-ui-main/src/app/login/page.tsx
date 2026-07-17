@@ -3,11 +3,11 @@
 import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { signIn, signOut, useSession } from "@/lib/auth-client";
-import { Loader2, Shield, LogOut, LayoutDashboard, User } from "lucide-react";
+import { Loader2, Shield, LogOut, LayoutDashboard, Mail, User } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import OtpInput from "@/components/ui/otp-input";
 
-type AuthMethods = { email: boolean; guest: boolean };
+type AuthMethods = { email: boolean; username: boolean };
 
 function LoginForm() {
   const router = useRouter();
@@ -16,13 +16,14 @@ function LoginForm() {
   const prefilledEmail = searchParams.get("email") || "";
   const { data: sessionData, isPending: sessionLoading } = useSession();
   const [methods, setMethods] = useState<AuthMethods | null>(null);
+  const [mode, setMode] = useState<"username" | "email">("username");
   const [email, setEmail] = useState(prefilledEmail);
   const [emailTouched, setEmailTouched] = useState(false);
   const [loadingMagic, setLoadingMagic] = useState(false);
   const [otpScreen, setOtpScreen] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
-  // Guest (username + password) login
+  // Username + password login
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loadingGuest, setLoadingGuest] = useState(false);
@@ -31,9 +32,18 @@ function LoginForm() {
   useEffect(() => {
     fetch("/api/auth/methods")
       .then((r) => r.json())
-      .then((m: AuthMethods) => setMethods(m))
-      .catch(() => setMethods({ email: true, guest: true }));
-  }, []);
+      .then((m: AuthMethods) => {
+        setMethods(m);
+        if ((!m.username && m.email) || (prefilledEmail && m.email)) setMode("email");
+      })
+      .catch(() => setMethods({ email: false, username: true }));
+  }, [prefilledEmail]);
+
+  const effectiveMode: "username" | "email" = !methods?.username
+    ? "email"
+    : !methods?.email
+      ? "username"
+      : mode;
 
   const isValidEmail = (val: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
   const emailError = emailTouched && email.length > 0 && !isValidEmail(email);
@@ -221,7 +231,30 @@ function LoginForm() {
               </div>
 
               <div className="space-y-6">
-                {methods.email && (
+                {methods.email && methods.username && (
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-[#fdf1df] rounded-xl border border-amber-500/20">
+                    <button
+                      type="button"
+                      onClick={() => setMode("username")}
+                      className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                        effectiveMode === "username" ? "bg-white text-[#3d200a] shadow-sm" : "text-[#8a5d33]"
+                      }`}
+                    >
+                      <User className="w-4 h-4" /> Username
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMode("email")}
+                      className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                        effectiveMode === "email" ? "bg-white text-[#8B0000] shadow-sm" : "text-[#8a5d33]"
+                      }`}
+                    >
+                      <Mail className="w-4 h-4" /> Email
+                    </button>
+                  </div>
+                )}
+
+                {effectiveMode === "email" && methods.email && (
                   <form onSubmit={handleSendCode} className="space-y-5">
                     <div className="space-y-1.5">
                       <label htmlFor="email" className="text-xs font-bold text-[#8a5d33] uppercase tracking-wider px-1">
@@ -261,22 +294,11 @@ function LoginForm() {
                   </form>
                 )}
 
-                {methods.email && methods.guest && (
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t border-amber-500/20"></span>
-                    </div>
-                    <div className="relative flex justify-center text-xs font-bold uppercase tracking-wider">
-                      <span className="bg-[#fffcf5] px-3 text-[#8a5d33]">Email not configured? Use a guest account</span>
-                    </div>
-                  </div>
-                )}
-
-                {methods.guest && (
+                {effectiveMode === "username" && methods.username && (
                   <form onSubmit={handleGuestLogin} className="space-y-5">
                     <div className="space-y-1.5">
                       <label htmlFor="username" className="text-xs font-bold text-[#8a5d33] uppercase tracking-wider px-1">
-                        Guest Username <span className="text-red-600">*</span>
+                        Username <span className="text-red-600">*</span>
                       </label>
                       <input
                         id="username"
@@ -311,7 +333,7 @@ function LoginForm() {
                       disabled={loadingGuest || !username || !password}
                       className="w-full flex items-center justify-center gap-2 bg-[#3d200a] text-white py-4 px-6 rounded-xl font-bold text-base hover:bg-[#2c1707] transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-50"
                     >
-                      {loadingGuest ? <Loader2 className="w-5 h-5 animate-spin" /> : (<><User className="w-5 h-5" /> Continue as Guest</>)}
+                      {loadingGuest ? <Loader2 className="w-5 h-5 animate-spin" /> : (<><User className="w-5 h-5" /> Sign In</>)}
                     </button>
                   </form>
                 )}

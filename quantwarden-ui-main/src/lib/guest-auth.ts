@@ -1,14 +1,11 @@
 /**
  * guest-auth.ts
  *
- * Helpers for email-free "guest" accounts (username + password).
+ * Helpers for email-free username + password accounts.
  *
- * Guest accounts let QuantWarden run with zero email infrastructure. Every guest
- * is given a deterministic synthetic email (`username@<GUEST_EMAIL_DOMAIN>`) so
+ * Every username account is given a deterministic synthetic email so
  * the existing email-keyed machinery (Better Auth, invitations, the in-app
- * invitation inbox, org membership) works for guests without modification.
- *
- * Guest accounts coexist with normal email accounts on the same instance.
+ * invitation inbox, org membership) works without modification.
  */
 
 import { prisma } from "@/lib/prisma";
@@ -17,13 +14,16 @@ export const GUEST_USERNAME_MIN = 3;
 export const GUEST_USERNAME_MAX = 32;
 export const GUEST_PASSWORD_MIN = 8;
 
-/** Guest auth is on by default; set GUEST_AUTH_ENABLED=false to disable it. */
+/** Username auth is on by default. GUEST_AUTH_ENABLED is a legacy alias. */
 export function isGuestAuthEnabled(): boolean {
-  return String(process.env.GUEST_AUTH_ENABLED || "").toLowerCase() !== "false";
+  const configured = process.env.USERNAME_AUTH_ENABLED ?? process.env.GUEST_AUTH_ENABLED;
+  return String(configured || "").toLowerCase() !== "false";
 }
 
 export function guestEmailDomain(): string {
-  return (process.env.GUEST_EMAIL_DOMAIN || "guest.local").trim().toLowerCase();
+  return (process.env.USERNAME_EMAIL_DOMAIN || process.env.GUEST_EMAIL_DOMAIN || "guest.local")
+    .trim()
+    .toLowerCase();
 }
 
 /** Normalize a username to its canonical, storable form. */

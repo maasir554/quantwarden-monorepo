@@ -14,6 +14,7 @@ import {
   Info,
   Loader2,
   Maximize2,
+  Network,
   Play,
   RefreshCw,
   ShieldAlert,
@@ -29,6 +30,7 @@ import type {
   ScanEngine,
   ScanHistoryCategory,
   ScanHistoryEntry,
+  OrgScanWorkflowStatus,
   ScanUpcomingEntry,
 } from "@/lib/scan-activity-types";
 
@@ -778,6 +780,55 @@ function UpcomingQueueSection({
   );
 }
 
+function SubdomainDiscoveryWorkflowSection({
+  workflow,
+}: {
+  workflow: OrgScanWorkflowStatus;
+}) {
+  const isQueued = workflow.status === "pending";
+
+  return (
+    <section className="rounded-[1.75rem] border border-cyan-200/80 bg-cyan-50/75 p-5 shadow-sm">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-600 text-white shadow-sm">
+            <Network className="h-5 w-5 animate-pulse" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-xl font-black tracking-tight text-[#3d200a]">
+                Subdomain Discovery
+              </h3>
+              <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-violet-700">
+                Automated
+              </span>
+              <span className="inline-flex items-center rounded-full border border-cyan-200 bg-white/70 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-cyan-700">
+                Onboarding
+              </span>
+            </div>
+            <p className="mt-2 text-sm font-bold text-[#5b3a1f]">
+              {isQueued ? "Discovery is queued for the scan worker." : "Preparing root domains for discovery."}
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-relaxed text-[#8a5d33]/80">
+              QuantWarden is starting Subfinder and will show per-domain progress here as soon as the discovery batch is claimed.
+            </p>
+            <p className="mt-2 text-xs font-semibold text-[#8a5d33]/65">
+              Started {formatWhen(workflow.createdAt)}
+            </p>
+          </div>
+        </div>
+        <span className="inline-flex shrink-0 items-center gap-2 self-start rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          {isQueued ? "Queued" : "Preparing"}
+        </span>
+      </div>
+      <div className="scan-progress-track mt-5 h-2.5 overflow-hidden rounded-full bg-cyan-100">
+        <div className="h-full w-1/3 animate-pulse rounded-full bg-linear-to-r from-cyan-600 via-cyan-400 to-cyan-200" />
+      </div>
+    </section>
+  );
+}
+
 
 export default function ScanActivityMonitor({
   orgId,
@@ -822,6 +873,7 @@ export default function ScanActivityMonitor({
     refreshActivity,
     cancelBatch,
     cancelQueuedRun,
+    workflows,
   } = useScanActivity(orgId, {
     orgSlug,
   });
@@ -874,11 +926,34 @@ export default function ScanActivityMonitor({
 
   const latestBatch = activity?.latestBatch || null;
   const upcomingQueue = activity?.upcomingQueue || [];
-  const activeSingles = (activity?.activeBatches || []).filter((batch) => batch.type === "single").slice(0, 3);
-  const activeBatch = activity?.activeBatches[0] || null;
+  const activeBatches = activity?.activeBatches || [];
+  const activeSingles = activeBatches.filter((batch) => batch.type === "single").slice(0, 3);
+  const activeSubdomainWorkflow = workflows
+    .filter(
+      (workflow) =>
+        workflow.workflowType === "onboarding" &&
+        workflow.currentStep === "subdomain_discovery" &&
+        (workflow.status === "pending" || workflow.status === "running")
+    )
+    .sort(
+      (left, right) =>
+        new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+    )[0] || null;
+  const workflowSubdomainBatch = activeSubdomainWorkflow
+    ? activeSubdomainWorkflow.activeBatchId
+      ? activeBatches.find((batch) => batch.id === activeSubdomainWorkflow.activeBatchId) || null
+      : activeBatches.find(
+        (batch) => batch.engine === "subdomainDiscovery" && batch.source === "automated"
+      ) || null
+    : null;
+  const activeBatch = workflowSubdomainBatch || activeBatches[0] || null;
   const featuredBatch = activeBatch;
+  const isPreparingSubdomainDiscovery = Boolean(
+    activeSubdomainWorkflow && !workflowSubdomainBatch
+  );
   const hasRunningSharedScan = Boolean(
-    activity?.activeBatches.some(
+    isPreparingSubdomainDiscovery ||
+    activeBatches.some(
       (batch) => batch.status === "running" || batch.status === "queued"
     )
   );
@@ -891,7 +966,8 @@ export default function ScanActivityMonitor({
     : streamStatus === "error"
       ? "error"
       : "idle";
-  const canStart = miniStreamStatus !== "connecting" && miniStreamStatus !== "connected";
+  const canStart = isPreparingSubdomainDiscovery ||
+    (miniStreamStatus !== "connecting" && miniStreamStatus !== "connected");
   const canStop = canScan && Boolean(activeBatch);
   const modalStreamStatus: "idle" | "connecting" | "connected" | "error" =
     checkingConnection || isStarting
@@ -905,12 +981,14 @@ export default function ScanActivityMonitor({
         : streamStatus;
   const streamChip = streamChipTone(modalStreamStatus);
   const miniStreamChip = streamChipTone(miniStreamStatus);
-  const showMiniProgress = miniStreamStatus === "connected" && Boolean(featuredBatch);
+  const showMiniProgress =
+    isPreparingSubdomainDiscovery ||
+    (miniStreamStatus === "connected" && Boolean(featuredBatch));
   const syncInFlight =
     isStarting ||
     checkingConnection ||
-    miniStreamStatus === "connecting" ||
-    modalStreamStatus === "connecting";
+    (!isPreparingSubdomainDiscovery &&
+      (miniStreamStatus === "connecting" || modalStreamStatus === "connecting"));
   const cardStateLabel = activity?.lock.active
     ? "In progress"
     : featuredBatch?.status === "queued"
@@ -931,7 +1009,7 @@ export default function ScanActivityMonitor({
           : latestBatch?.status === "running"
             ? "Running"
             : "Idle";
-  const hasActiveSharedScan = Boolean(activity?.activeBatches.length);
+  const hasActiveSharedScan = Boolean(activeBatches.length) || isPreparingSubdomainDiscovery;
   const liveScanBatch = activeBatch;
   const shouldShowHistoryPanel = hasActiveSharedScan ? showHistoryPanel : true;
   const shouldShowLiveScanPanel = hasActiveSharedScan && monitorPanel === "live";
@@ -945,7 +1023,12 @@ export default function ScanActivityMonitor({
   const headerCompactEnter = 104;
   const headerCompactExit = 52;
   const effectiveHeaderCompact = isHeaderCompact || hideHeaderActions;
-  const serviceWarningEngine = activity?.lock.engine || activeBatch?.engine || latestBatch?.engine || null;
+  const serviceWarningEngine =
+    activity?.lock.engine ||
+    activeBatch?.engine ||
+    (isPreparingSubdomainDiscovery ? "subdomainDiscovery" : null) ||
+    latestBatch?.engine ||
+    null;
   const outageSignalActive = Boolean(
     error && /endpoint appears unavailable|service unavailable|may stall|nmap api/i.test(error)
   );
@@ -1165,8 +1248,17 @@ export default function ScanActivityMonitor({
                 />
               </div>
               <p className="mt-1 truncate text-xs font-semibold text-red-100/80">
-                {featuredBatch ? batchLabel(featuredBatch.type, featuredBatch.engine) : "No active shared scans"}
+                {featuredBatch
+                  ? batchLabel(featuredBatch.type, featuredBatch.engine)
+                  : isPreparingSubdomainDiscovery
+                    ? "Subdomain Discovery"
+                    : "No active shared scans"}
               </p>
+              {isPreparingSubdomainDiscovery && (
+                <p className="mt-1 truncate text-[11px] font-semibold text-red-100/75">
+                  Preparing onboarding root domains
+                </p>
+              )}
               {upcomingQueue.length > 0 && (
                 <p className="mt-1 truncate text-[11px] font-semibold text-red-100/75">
                   {upcomingQueue.length} upcoming scheduled {upcomingQueue.length === 1 ? "scan" : "scans"} in queue
@@ -1178,12 +1270,20 @@ export default function ScanActivityMonitor({
             <div className="mt-3 flex items-center gap-2.5">
               <div className="scan-progress-track h-2 flex-1 overflow-hidden rounded-full bg-white/10">
                 <div
-                  className="scan-progress-fill h-full rounded-full bg-linear-to-r from-amber-300 via-amber-100 to-white transition-all"
-                  style={{ width: `${featuredBatch?.percentComplete ?? 0}%` }}
+                  className={`scan-progress-fill h-full rounded-full bg-linear-to-r from-amber-300 via-amber-100 to-white transition-all ${
+                    isPreparingSubdomainDiscovery ? "animate-pulse" : ""
+                  }`}
+                  style={{
+                    width: isPreparingSubdomainDiscovery
+                      ? "34%"
+                      : `${featuredBatch?.percentComplete ?? 0}%`,
+                  }}
                 />
               </div>
-              <span className="shrink-0 text-sm font-black text-white">
-                {featuredBatch?.percentComplete ?? 0}%
+              <span className="shrink-0 text-xs font-black text-white">
+                {isPreparingSubdomainDiscovery
+                  ? activeSubdomainWorkflow?.status === "pending" ? "Queued" : "Preparing"
+                  : `${featuredBatch?.percentComplete ?? 0}%`}
               </span>
             </div>
           )}
@@ -1192,7 +1292,11 @@ export default function ScanActivityMonitor({
           {showMiniProgress ? (
             <div className="min-w-0 flex items-center gap-2 text-white/88">
               <span className="truncate font-bold">
-                {`${featuredBatch.completedAssets + featuredBatch.failedAssets}/${featuredBatch.totalAssets}`}
+                {isPreparingSubdomainDiscovery
+                  ? "Onboarding workflow"
+                  : featuredBatch
+                    ? `${featuredBatch.completedAssets + featuredBatch.failedAssets}/${featuredBatch.totalAssets}`
+                    : ""}
               </span>
             </div>
           ) : (
@@ -1289,7 +1393,7 @@ export default function ScanActivityMonitor({
                     </button>
                     {showInfoTooltip && (
                       <div className="absolute left-0 top-10 z-20 w-72 rounded-xl border border-white/30 bg-[#5d0000]/94 p-3 text-xs font-medium leading-relaxed text-red-50 shadow-xl backdrop-blur-sm">
-                        <p>Track live scan progress, recent runs, and failure diagnostics for this organization.</p>
+                        <p>Track live subdomain discovery, port discovery, OpenSSL scans, recent runs, and failure diagnostics for this organization.</p>
                         <p className="mt-1 text-red-100/85">Updates reconnect automatically while scans are in progress.</p>
                       </div>
                     )}
@@ -1830,6 +1934,10 @@ export default function ScanActivityMonitor({
 
                   {shouldShowLiveScanPanel && liveScanBatch && (
                     <BatchSection batch={liveScanBatch} />
+                  )}
+
+                  {shouldShowLiveScanPanel && isPreparingSubdomainDiscovery && activeSubdomainWorkflow && (
+                    <SubdomainDiscoveryWorkflowSection workflow={activeSubdomainWorkflow} />
                   )}
 
                   {!latestBatch && historyEntries.length === 0 && !shouldShowLiveScanPanel && (

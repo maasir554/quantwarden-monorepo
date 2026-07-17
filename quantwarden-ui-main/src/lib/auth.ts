@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { organization, magicLink, username } from "better-auth/plugins";
 import { prisma } from "@/lib/prisma";
-import { isEmailConfigured, sendEmail } from "@/lib/mailer";
+import { isEmailAuthEnabled, sendEmail } from "@/lib/mailer";
 
 function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -110,7 +110,7 @@ export const auth = betterAuth({
     provider: "postgresql", 
   }),
   emailAndPassword: {
-    // Enabled for guest (username + password) accounts. Email users have no
+    // Enabled for username + password accounts. Email users have no
     // credential account row, so they continue to use Magic Links + OTP only.
     enabled: true,
   },
@@ -122,11 +122,8 @@ export const auth = betterAuth({
     magicLink({
       expiresIn: 600, // 10 minutes
       sendMagicLink: async ({ email, token, url }) => {
-        if (!isEmailConfigured()) {
-          // Email is optional. In a guest-only deployment magic links are never
-          // requested, but guard here so nothing throws if one slips through.
-          console.error("Cannot send magic link: SMTP is not configured.");
-          return;
+        if (!isEmailAuthEnabled()) {
+          throw new Error("Email authentication is disabled.");
         }
 
         // Generate 6-digit OTP and store alongside the magic link token
@@ -164,4 +161,3 @@ export const auth = betterAuth({
     }),
   ],
 });
-

@@ -39,6 +39,25 @@ interface TeamManagementProps {
   canManageRoles: boolean;
 }
 
+const SYSTEM_INVITE_ROLES = [
+  { id: "admin", name: "Administrator", permissions: { team: true, scan: true, asset: true } },
+  { id: "analyst", name: "Analyst", permissions: { team: false, scan: false, asset: false } },
+  { id: "auditor", name: "Auditor", permissions: { team: false, scan: false, asset: false } },
+];
+
+function buildAvailableRoles(roles: any[]) {
+  const available = [...(roles || [])];
+  for (const fallback of SYSTEM_INVITE_ROLES) {
+    const exists = available.some(
+      (role) =>
+        String(role.id).toLowerCase() === fallback.id ||
+        String(role.name).toLowerCase() === fallback.name.toLowerCase()
+    );
+    if (!exists) available.push(fallback);
+  }
+  return available;
+}
+
 // ═══════════════════════════════════════
 // Reusable Role Dropdown
 // ═══════════════════════════════════════
@@ -54,9 +73,11 @@ function RoleDropdown({
   small?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const allRoles = roles.map((r) => ({ id: r.id, name: r.name }));
+  const selectableRoleCount = allRoles.filter((role) => role.id !== "owner").length;
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -75,14 +96,18 @@ function RoleDropdown({
     const updatePos = () => {
       if (!triggerRef.current) return;
       const rect = triggerRef.current.getBoundingClientRect();
+      const optionCount = Math.max(1, selectableRoleCount);
+      const dropdownHeight = Math.min(248, 48 + optionCount * 44);
+      const dropdownWidth = Math.max(192, rect.width);
       const spaceBelow = window.innerHeight - rect.bottom;
-      const dropdownHeight = 240; // approximate max height
-      // Open upward if not enough space below
-      if (spaceBelow < dropdownHeight) {
-        setDropdownPos({ top: rect.top - dropdownHeight - 4, left: rect.right - 192 });
-      } else {
-        setDropdownPos({ top: rect.bottom + 6, left: rect.right - 192 });
-      }
+      const top = spaceBelow >= dropdownHeight + 8
+        ? rect.bottom + 6
+        : Math.max(8, rect.top - dropdownHeight - 6);
+      const left = Math.min(
+        Math.max(8, rect.left),
+        Math.max(8, window.innerWidth - dropdownWidth - 8)
+      );
+      setDropdownPos({ top, left, width: dropdownWidth });
     };
     updatePos();
     // Listen for scroll on all ancestors to reposition
@@ -93,9 +118,7 @@ function RoleDropdown({
       window.removeEventListener("scroll", scrollHandler, true);
       window.removeEventListener("resize", scrollHandler);
     };
-  }, [isOpen]);
-
-  const allRoles = roles.map((r) => ({ id: r.id, name: r.name }));
+  }, [isOpen, selectableRoleCount]);
 
   const currentLabel = allRoles.find((r) => r.id === currentRole)?.name || currentRole;
 
@@ -117,8 +140,8 @@ function RoleDropdown({
       {isOpen && dropdownPos && ReactDOM.createPortal(
         <div
           ref={dropdownRef}
-          className="fixed w-48 bg-white border border-amber-500/20 rounded-xl shadow-xl overflow-hidden flex flex-col py-1.5 animate-in fade-in zoom-in-95 duration-100"
-          style={{ top: dropdownPos.top, left: Math.max(8, dropdownPos.left), zIndex: 9999 }}
+          className="fixed bg-white border border-amber-500/20 rounded-xl shadow-xl overflow-hidden flex flex-col py-1.5 animate-in fade-in zoom-in-95 duration-100"
+          style={{ top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width, zIndex: 9999 }}
         >
           <div className="px-3 pb-1.5 pt-1 mb-1 text-[10px] font-bold text-[#8a5d33]/50 uppercase tracking-wider border-b border-amber-500/10">
             Select Role
@@ -237,6 +260,11 @@ function SectionCard({ title, icon: Icon, badge, onExpand, children, className }
 // MAIN COMPONENT
 // ═══════════════════════════════════════
 export default function TeamManagement({ org, currentUserRole, currentUserId, canManageTeam, canManageRoles }: TeamManagementProps) {
+  const availableRoles = buildAvailableRoles(org.roles || []);
+  const defaultInviteRoleId =
+    availableRoles.find((role: any) => role.name.toLowerCase() === "analyst")?.id ||
+    availableRoles.find((role: any) => role.id !== "owner")?.id ||
+    "analyst";
   const [members, setMembers] = useState<any[]>([]);
   const [invites, setInvites] = useState<any[]>([]);
   const [joinRequests, setJoinRequests] = useState<any[]>([]);
@@ -248,7 +276,9 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
   // Invite input
   const [newInvites, setNewInvites] = useState<{ email: string; roleId: string }[]>([]);
   const [currentEmail, setCurrentEmail] = useState("");
-  const [currentInviteRole, setCurrentInviteRole] = useState(() => org.roles.find((r: any) => r.name.toLowerCase() === "analyst")?.id || org.roles[0]?.id || "");
+  const [emailAuthEnabled, setEmailAuthEnabled] = useState(false);
+  const [usernameDomain, setUsernameDomain] = useState("guest.local");
+  const [currentInviteRole, setCurrentInviteRole] = useState(defaultInviteRoleId);
   const [sendingInvites, setSendingInvites] = useState(false);
 
   // Member actions
@@ -260,7 +290,7 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
 
   // Accept request role
   const [acceptRoleFor, setAcceptRoleFor] = useState<string | null>(null);
-  const [acceptRole, setAcceptRole] = useState(() => org.roles.find((r: any) => r.name.toLowerCase() === "analyst")?.id || org.roles[0]?.id || "");
+  const [acceptRole, setAcceptRole] = useState(defaultInviteRoleId);
 
   // Modals
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
@@ -286,6 +316,19 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   useEffect(() => {
+    fetch("/api/auth/methods")
+      .then((res) => res.json())
+      .then((methods) => {
+        setEmailAuthEnabled(Boolean(methods.email));
+        if (methods.usernameDomain) setUsernameDomain(String(methods.usernameDomain));
+      })
+      .catch(() => {
+        setEmailAuthEnabled(false);
+        setUsernameDomain("guest.local");
+      });
+  }, []);
+
+  useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpenMenuId(null);
     };
@@ -294,8 +337,7 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
   }, []);
 
   // === Invite Handlers ===
-  // Accept either an email address or a guest username. The backend resolves
-  // each identifier (email -> emailed invite, username -> in-app guest invite).
+  // Username invitations are always available; email invitations are opt-in.
   const handleAddEmail = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentEmail.trim()) return;
@@ -304,14 +346,14 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
     const tokens = currentEmail
       .split(/[\s,]+/)
       .map((e) => e.trim().toLowerCase())
-      .filter((e) => e.length > 0 && (emailRegex.test(e) || usernameRegex.test(e)));
+      .filter((e) => e.length > 0 && (usernameRegex.test(e) || (emailAuthEnabled && emailRegex.test(e))));
     if (tokens.length === 0) return;
     const toAdd = tokens.filter((email) => !newInvites.some((inv) => inv.email === email)).map((email) => ({ email, roleId: currentInviteRole }));
     if (toAdd.length > 0) setNewInvites([...newInvites, ...toAdd]);
     setCurrentEmail("");
   };
 
-  // === Guest password reset ===
+  // === Username-account password reset ===
   const [resetFor, setResetFor] = useState<string | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [resetDone, setResetDone] = useState(false);
@@ -342,7 +384,12 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ organizationId: org.id, invites: newInvites.map((inv) => ({ email: inv.email, roleId: inv.roleId })) }),
       });
-      if (res.ok) { setNewInvites([]); fetchAll(); }
+      if (res.ok) {
+        const data = await res.json();
+        setNewInvites([]);
+        if (data.warnings?.length) setError(data.warnings.join(" "));
+        fetchAll();
+      }
       else { const data = await res.json(); setError(data.error || "Failed to send invitations."); }
     } catch { setError("Something went wrong."); }
     finally { setSendingInvites(false); }
@@ -396,6 +443,10 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
   const uniqueRoles = Array.from(new Set(members.map((m) => m.role)));
   const activeInvites = invites.filter((inv) => inv.status === "pending");
   const previewMembers = members.slice(0, 3);
+  const displayInviteIdentifier = (value: string) => {
+    const suffix = `@${usernameDomain.toLowerCase()}`;
+    return value.toLowerCase().endsWith(suffix) ? value.slice(0, -suffix.length) : value;
+  };
 
   if (loading) {
     return (
@@ -427,7 +478,7 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
             <div className="flex items-center gap-2">
               <p className={`${compact ? "text-xs" : "text-sm"} font-bold text-[#3d200a] truncate`}>{member.userName || "Unknown"}</p>
               {isSelf && <span className="text-[9px] font-bold text-[#8a5d33] bg-amber-500/10 px-1.5 py-0.5 rounded">You</span>}
-              {member.userUsername && <span className="text-[9px] font-bold text-[#3d200a] bg-[#3d200a]/10 px-1.5 py-0.5 rounded">Guest</span>}
+              {member.userUsername && <span className="text-[9px] font-bold text-[#3d200a] bg-[#3d200a]/10 px-1.5 py-0.5 rounded">Username</span>}
             </div>
             <p className={`${compact ? "text-[10px]" : "text-xs"} text-[#8a5d33] truncate`}>{member.userUsername ? `@${member.userUsername}` : member.userEmail}</p>
           </div>
@@ -436,14 +487,14 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
         <div className="flex items-center gap-2 shrink-0">
           {changingRoleFor === member.id ? (
             <div className="flex items-center gap-2 animate-in fade-in zoom-in-95 duration-150">
-              <RoleDropdown currentRole={member.roleId} roles={org.roles} onChange={(newRole) => handleChangeRole(member.id, newRole)} small />
+              <RoleDropdown currentRole={member.roleId} roles={availableRoles} onChange={(newRole) => handleChangeRole(member.id, newRole)} small />
               <button onClick={() => setChangingRoleFor(null)} className="text-[10px] text-[#8a5d33] font-bold hover:text-[#3d200a] px-1.5 py-1 rounded-lg hover:bg-amber-500/10 transition-colors">Cancel</button>
             </div>
           ) : (
             <>
               <span 
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] uppercase tracking-wider font-bold border"
-                style={getRoleStyle(member.roleId, org.roles)}
+                style={getRoleStyle(member.roleId, availableRoles)}
               >
                 {isOwner && <Crown className="w-2.5 h-2.5" />}
                 {member.roleId === "admin" && <Shield className="w-2.5 h-2.5" />}
@@ -553,23 +604,27 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
       {/* Fixed top: email input with inline add button */}
       <div className="px-4 pt-3 pb-2 shrink-0">
         <div className="flex items-center gap-1.5 mb-2">
-          <label className="text-[10px] font-bold text-[#8a5d33]/60 uppercase tracking-wider">Email or Username</label>
+          <label className="text-[10px] font-bold text-[#8a5d33]/60 uppercase tracking-wider">
+            {emailAuthEnabled ? "Username or Email" : "Username"}
+          </label>
           <div className="relative group/info">
             <button type="button" className="w-4 h-4 rounded-full bg-amber-500/10 flex items-center justify-center text-[#8a5d33]/50 hover:bg-amber-500/20 hover:text-[#8a5d33] transition-colors cursor-help">
               <Info className="w-2.5 h-2.5" />
             </button>
             <div className="absolute left-0 top-full mt-1.5 w-52 bg-white text-[#8a5d33] text-[10px] leading-relaxed px-3 py-2 rounded-lg shadow-lg border border-amber-500/20 opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible transition-all duration-150 pointer-events-none z-50">
-              Invite by email (they get an email link) or by guest username (the invite appears in their in-app inbox — no email needed).
+              {emailAuthEnabled
+                ? "Invite by username through the in-app inbox, or by email link."
+                : "Invite by username. The invitation appears in their in-app inbox."}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <RoleDropdown currentRole={currentInviteRole} roles={org.roles} onChange={setCurrentInviteRole} small />
+          <RoleDropdown currentRole={currentInviteRole} roles={availableRoles} onChange={setCurrentInviteRole} small />
           <input
             type="text"
             value={currentEmail}
             onChange={(e) => setCurrentEmail(e.target.value)}
-            placeholder="colleague@company.com or username"
+            placeholder={emailAuthEnabled ? "username or colleague@company.com" : "colleague-username"}
             className="flex-1 min-w-0 bg-white border border-amber-500/30 rounded-xl px-4 py-2 text-[#3d200a] placeholder:text-[#8a5d33]/40 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/50 transition-all text-sm"
           />
           <button
@@ -587,11 +642,13 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
           {newInvites.map((inv) => (
             <div key={inv.email} className="flex items-center justify-between bg-[#fdf8f0] border border-amber-500/15 rounded-lg px-3 py-1.5">
               <div className="flex items-center gap-2 min-w-0">
-                <Mail className="w-3.5 h-3.5 text-amber-500/50 shrink-0" />
+                {inv.email.includes("@")
+                  ? <Mail className="w-3.5 h-3.5 text-amber-500/50 shrink-0" />
+                  : <UserPlus className="w-3.5 h-3.5 text-amber-500/50 shrink-0" />}
                 <span className="text-xs font-semibold text-[#3d200a] truncate">{inv.email}</span>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <RoleDropdown currentRole={inv.roleId} roles={org.roles} onChange={(newRole) => setNewInvites(newInvites.map((i) => (i.email === inv.email ? { ...i, roleId: newRole } : i)))} small />
+                <RoleDropdown currentRole={inv.roleId} roles={availableRoles} onChange={(newRole) => setNewInvites(newInvites.map((i) => (i.email === inv.email ? { ...i, roleId: newRole } : i)))} small />
                 <button type="button" onClick={() => setNewInvites(newInvites.filter((i) => i.email !== inv.email))} className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors">
                   <X className="w-3 h-3" />
                 </button>
@@ -706,7 +763,7 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <button onClick={() => { setAcceptRoleFor(req.id); setAcceptRole(org.roles.find((r: any) => r.name.toLowerCase() === "analyst")?.id || org.roles[0]?.id || ""); setExpandedSection("requests"); }} className="px-2 py-1 bg-emerald-600 text-white rounded-md text-[10px] font-bold hover:bg-emerald-700"><Check className="w-3 h-3" /></button>
+                      <button onClick={() => { setAcceptRoleFor(req.id); setAcceptRole(defaultInviteRoleId); setExpandedSection("requests"); }} className="px-2 py-1 bg-emerald-600 text-white rounded-md text-[10px] font-bold hover:bg-emerald-700"><Check className="w-3 h-3" /></button>
                       <button onClick={() => handleDenyRequest(req.id)} className="px-2 py-1 bg-red-50 text-red-600 border border-red-200 rounded-md text-[10px] font-bold hover:bg-red-100"><X className="w-3 h-3" /></button>
                     </div>
                   </div>
@@ -744,16 +801,16 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
                         <Mail className="w-3.5 h-3.5 text-amber-600/60" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-[#3d200a] truncate">{inv.email}</p>
+                        <p className="text-xs font-semibold text-[#3d200a] truncate">{displayInviteIdentifier(inv.email)}</p>
                         <p className="text-[10px] text-[#8a5d33]/50">{new Date(inv.createdAt).toLocaleDateString()}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span 
                         className="px-2 py-0.5 rounded text-[9px] uppercase font-bold border"
-                        style={getRoleStyle(inv.roleId, org.roles)}
+                        style={getRoleStyle(inv.roleId, availableRoles)}
                       >
-                        {org.roles.find((r: any) => r.id === inv.roleId)?.name || "Unknown Role"}
+                        {availableRoles.find((r: any) => r.id === inv.roleId)?.name || inv.roleId}
                       </span>
                       <button onClick={() => handleRevokeInvite(inv.id)} className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors">
                         <Trash2 className="w-3 h-3" />
@@ -833,7 +890,7 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
                   <div className="flex items-center gap-2 shrink-0 ml-4">
                     {acceptRoleFor === req.id ? (
                       <div className="flex items-center gap-2 animate-in fade-in zoom-in-95 duration-150">
-                        <RoleDropdown currentRole={acceptRole} roles={org.roles} onChange={(r) => setAcceptRole(r)} small />
+                        <RoleDropdown currentRole={acceptRole} roles={availableRoles} onChange={(r) => setAcceptRole(r)} small />
                         <button onClick={() => handleAcceptRequest(req.id, acceptRole)} disabled={actionLoading} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all disabled:opacity-50">
                           {actionLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Confirm
                         </button>
@@ -842,7 +899,7 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
                     ) : (
                       <>
                         <span className="text-xs text-[#8a5d33]/60">{new Date(req.createdAt).toLocaleDateString()}</span>
-                        <button onClick={() => { setAcceptRoleFor(req.id); setAcceptRole(org.roles.find((r: any) => r.name.toLowerCase() === "analyst")?.id || org.roles[0]?.id || ""); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all">
+                        <button onClick={() => { setAcceptRoleFor(req.id); setAcceptRole(defaultInviteRoleId); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all">
                           <UserCheck className="w-3.5 h-3.5" /> Accept
                         </button>
                         <button onClick={() => handleDenyRequest(req.id)} disabled={actionLoading} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-bold hover:bg-red-100 transition-all disabled:opacity-50">
@@ -878,19 +935,21 @@ export default function TeamManagement({ org, currentUserRole, currentUserId, ca
               <div key={inv.id} className="px-6 py-3.5 flex items-center justify-between hover:bg-amber-500/[.02] transition-colors">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-9 h-9 bg-amber-500/10 rounded-full flex items-center justify-center shrink-0">
-                    <Mail className="w-4 h-4 text-amber-600/60" />
+                    {inv.email.toLowerCase().endsWith(`@${usernameDomain.toLowerCase()}`)
+                      ? <UserPlus className="w-4 h-4 text-amber-600/60" />
+                      : <Mail className="w-4 h-4 text-amber-600/60" />}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[#3d200a] truncate">{inv.email}</p>
+                    <p className="text-sm font-semibold text-[#3d200a] truncate">{displayInviteIdentifier(inv.email)}</p>
                     <p className="text-xs text-[#8a5d33]/60">Sent {new Date(inv.createdAt).toLocaleDateString()}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span 
                     className="px-2.5 py-1 rounded-lg text-[10px] uppercase tracking-wider font-bold border"
-                    style={getRoleStyle(inv.roleId, org.roles)}
+                    style={getRoleStyle(inv.roleId, availableRoles)}
                   >
-                    {org.roles.find((r: any) => r.id === inv.roleId)?.name || "Unknown Role"}
+                    {availableRoles.find((r: any) => r.id === inv.roleId)?.name || inv.roleId}
                   </span>
                   <span className="inline-flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-1 rounded-md text-xs font-bold border border-amber-200">
                     <Clock className="w-3 h-3" /> Pending

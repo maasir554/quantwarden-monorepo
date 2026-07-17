@@ -16,7 +16,7 @@ type InviteSignupDetails = {
   callbackUrl: string;
 };
 
-type AuthMethods = { email: boolean; guest: boolean; guestDomain: string };
+type AuthMethods = { email: boolean; username: boolean; usernameDomain: string };
 
 function SignupForm() {
   const router = useRouter();
@@ -38,7 +38,7 @@ function SignupForm() {
   const callbackUrl = inviteCallbackUrl || rawCallbackUrl || "/app";
   const { data: sessionData, isPending: sessionLoading } = useSession();
   const [methods, setMethods] = useState<AuthMethods | null>(null);
-  const [mode, setMode] = useState<"email" | "guest">("email");
+  const [mode, setMode] = useState<"email" | "username">("username");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
@@ -49,7 +49,7 @@ function SignupForm() {
   const [inviteDetails, setInviteDetails] = useState<InviteSignupDetails | null>(null);
   const [inviteLoading, setInviteLoading] = useState(Boolean(inviteId));
 
-  // Guest (username + password) signup
+  // Username + password signup
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loadingGuest, setLoadingGuest] = useState(false);
@@ -59,17 +59,17 @@ function SignupForm() {
   const nameError = nameTouched && name.trim().length === 0;
   const isInviteSignup = Boolean(inviteId);
 
-  // A guest invitation carries a synthetic email ending with @<guestDomain>.
+  // A username invitation carries a synthetic email ending with @<usernameDomain>.
   const inviteIsGuest = Boolean(
-    inviteDetails && methods && inviteDetails.email.toLowerCase().endsWith(`@${methods.guestDomain}`)
+    inviteDetails && methods && inviteDetails.email.toLowerCase().endsWith(`@${methods.usernameDomain}`)
   );
   const inviteGuestUsername = inviteIsGuest ? inviteDetails!.email.split("@")[0] : "";
 
   // Which signup flow to show for a NON-invite signup.
-  const effectiveMode: "email" | "guest" = !methods?.email
-    ? "guest"
-    : !methods?.guest
-      ? "email"
+  const effectiveMode: "email" | "username" = !methods?.username
+    ? "email"
+    : !methods?.email
+      ? "username"
       : mode;
 
   useEffect(() => {
@@ -77,9 +77,9 @@ function SignupForm() {
       .then((r) => r.json())
       .then((m: AuthMethods) => {
         setMethods(m);
-        if (!m.email && m.guest) setMode("guest");
+        if (!m.username && m.email) setMode("email");
       })
-      .catch(() => setMethods({ email: true, guest: true, guestDomain: "guest.local" }));
+      .catch(() => setMethods({ email: false, username: true, usernameDomain: "guest.local" }));
   }, []);
 
   useEffect(() => {
@@ -209,7 +209,7 @@ function SignupForm() {
       const data = await res.json();
 
       if (!res.ok) {
-        setSubmitError(data.error || "Unable to create your guest account.");
+        setSubmitError(data.error || "Unable to create your account.");
         return;
       }
 
@@ -267,7 +267,7 @@ function SignupForm() {
     </div>
   );
 
-  // Guest signup form (also used for completing a guest invitation).
+  // Username signup form (also used for completing a username invitation).
   const guestForm = (
     <form onSubmit={handleGuestSignup} className="space-y-5">
       {nameField}
@@ -319,7 +319,7 @@ function SignupForm() {
         disabled={loadingGuest || !name.trim() || (!inviteIsGuest && !username) || password.length < 8}
         className="w-full flex items-center justify-center gap-2 bg-[#3d200a] text-white py-4 px-6 rounded-xl font-bold text-base hover:bg-[#2c1707] transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-50"
       >
-        {loadingGuest ? <Loader2 className="w-5 h-5 animate-spin" /> : (<><User className="w-5 h-5" /> {isInviteSignup ? "Join with Guest Account" : "Create Guest Account"}</>)}
+        {loadingGuest ? <Loader2 className="w-5 h-5 animate-spin" /> : (<><User className="w-5 h-5" /> {isInviteSignup ? "Join Organization" : "Create Account"}</>)}
       </button>
     </form>
   );
@@ -405,8 +405,17 @@ function SignupForm() {
   } else {
     signupBody = (
       <>
-        {methods?.email && methods?.guest && (
+        {methods?.email && methods?.username && (
           <div className="grid grid-cols-2 gap-2 mb-2 p-1 bg-[#fdf1df] rounded-xl border border-amber-500/20">
+            <button
+              type="button"
+              onClick={() => { setMode("username"); setSubmitError(""); }}
+              className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                effectiveMode === "username" ? "bg-white text-[#3d200a] shadow-sm" : "text-[#8a5d33]"
+              }`}
+            >
+              <User className="w-4 h-4" /> Username
+            </button>
             <button
               type="button"
               onClick={() => { setMode("email"); setSubmitError(""); }}
@@ -416,18 +425,9 @@ function SignupForm() {
             >
               <Mail className="w-4 h-4" /> Email
             </button>
-            <button
-              type="button"
-              onClick={() => { setMode("guest"); setSubmitError(""); }}
-              className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
-                effectiveMode === "guest" ? "bg-white text-[#3d200a] shadow-sm" : "text-[#8a5d33]"
-              }`}
-            >
-              <User className="w-4 h-4" /> Guest
-            </button>
           </div>
         )}
-        {effectiveMode === "guest" ? guestForm : emailForm}
+        {effectiveMode === "username" ? guestForm : emailForm}
       </>
     );
   }

@@ -39,6 +39,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { FirstScanAnalysisNotice } from "./OnboardingScanStatus";
 
 interface OrgOverviewProps {
   org: any;
@@ -807,6 +808,20 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
   }
 
   if (!data) return null;
+
+  if (data.totalScanned === 0 || data.initialScanPending) {
+    return (
+      <div className="flex flex-col space-y-5 pb-10 animate-in fade-in duration-300">
+        <div className="rounded-3xl border border-white/40 bg-white/40 p-5 shadow-sm ring-1 ring-amber-500/10 backdrop-blur-xl">
+          <h1 className="text-2xl font-bold tracking-tight text-[#3d200a]">Security Overview</h1>
+          <p className="mt-1 text-sm font-semibold text-[#8a5d33]/70">
+            Real-time intelligence from completed discovery and OpenSSL endpoint scans.
+          </p>
+        </div>
+        <FirstScanAnalysisNotice orgId={org.id} orgSlug={org.slug} area="overview" />
+      </div>
+    );
+  }
 
   const tls13CipherRows =
     tls13CipherTab === "negotiated" ? data.tls13CipherNegotiated || [] : data.tls13CipherAccepted || [];

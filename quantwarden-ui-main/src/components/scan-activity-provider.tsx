@@ -12,7 +12,12 @@ import {
 } from "react";
 import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import type { OrgScanActivityPayload, ScanBatchType, ScanEngine } from "@/lib/scan-activity-types";
+import type {
+  OrgScanActivityPayload,
+  OrgScanWorkflowStatus,
+  ScanBatchType,
+  ScanEngine,
+} from "@/lib/scan-activity-types";
 
 const STREAM_RECONNECT_BASE_MS = 1000;
 const STREAM_RECONNECT_MAX_MS = 15000;
@@ -79,6 +84,7 @@ interface ScanActivityContextValue {
   registerOrg: (options: RegisteredOrgOptions) => void;
   unregisterOrg: (orgId: string) => void;
   getOrgState: (orgId: string) => OrgActivityState;
+  getOrgWorkflows: (orgId: string) => OrgScanWorkflowStatus[];
   refreshOrgActivity: (orgId: string) => Promise<OrgScanActivityPayload | null>;
   checkForActiveScans: (
     orgId: string,
@@ -147,6 +153,7 @@ export function ScanActivityProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [monitorOrgId, setMonitorOrgId] = useState<string | null>(null);
   const [orgStates, setOrgStates] = useState<Record<string, OrgActivityState>>({});
+  const [orgWorkflows, setOrgWorkflows] = useState<Record<string, OrgScanWorkflowStatus[]>>({});
   const orgStatesRef = useRef<Record<string, OrgActivityState>>({});
   const subscriptionsRef = useRef<Map<string, { count: number; orgSlug?: string }>>(new Map());
   const refreshPromisesRef = useRef<Map<string, Promise<OrgScanActivityPayload | null>>>(new Map());
@@ -782,8 +789,9 @@ export function ScanActivityProvider({ children }: { children: ReactNode }) {
         try {
           const res = await fetch(`/api/orgs/workflow-status?orgId=${encodeURIComponent(options.orgId)}`, { cache: "no-store" });
           if (!res.ok) return;
-          const json = await res.json() as { workflows?: Array<{ id: string; workflowType: string; currentStep: string; status: string }> };
+          const json = await res.json() as { workflows?: OrgScanWorkflowStatus[] };
           const workflows = json.workflows || [];
+          setOrgWorkflows((current) => ({ ...current, [options.orgId]: workflows }));
           for (const wf of workflows) {
             // Use a stable key tied to the subdomain_discovery step, not wf.currentStep
             // (currentStep may have already advanced by the time we first poll)
@@ -1066,6 +1074,7 @@ export function ScanActivityProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const getOrgState = useCallback((orgId: string) => orgStates[orgId] || defaultOrgState, [orgStates]);
+  const getOrgWorkflows = useCallback((orgId: string) => orgWorkflows[orgId] || [], [orgWorkflows]);
 
   const contextValue = useMemo<ScanActivityContextValue>(() => ({
     hydrated,
@@ -1075,6 +1084,7 @@ export function ScanActivityProvider({ children }: { children: ReactNode }) {
     registerOrg,
     unregisterOrg,
     getOrgState,
+    getOrgWorkflows,
     refreshOrgActivity,
     checkForActiveScans,
     startActivityMonitor,
@@ -1088,6 +1098,7 @@ export function ScanActivityProvider({ children }: { children: ReactNode }) {
     closeMonitor,
     createBatch,
     getOrgState,
+    getOrgWorkflows,
     hydrated,
     monitorOrgId,
     openMonitor,
@@ -1117,6 +1128,7 @@ export function useScanActivity(
     registerOrg,
     unregisterOrg,
     getOrgState,
+    getOrgWorkflows,
     createBatch,
     cancelBatch,
     cancelQueuedRun,
@@ -1139,6 +1151,7 @@ export function useScanActivity(
   }, [options?.orgSlug, orgId, registerOrg, unregisterOrg]);
 
   const state = getOrgState(orgId);
+  const workflows = getOrgWorkflows(orgId);
 
   return {
     hydrated,
@@ -1157,6 +1170,7 @@ export function useScanActivity(
     cancelBatch: (batchId: string) => cancelBatch({ orgId, batchId }),
     cancelQueuedRun: (runId: string) => cancelQueuedRun({ orgId, runId }),
     activity: state.data,
+    workflows,
     loading: state.loading,
     error: state.error,
     streamStatus: state.streamStatus,

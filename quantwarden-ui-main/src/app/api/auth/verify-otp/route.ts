@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isEmailAuthEnabled } from "@/lib/mailer";
 
 export async function POST(req: NextRequest) {
   try {
+    if (!isEmailAuthEnabled()) {
+      return NextResponse.json({ error: "Email sign-in is disabled." }, { status: 403 });
+    }
+
     const { email, code } = await req.json();
 
     if (!email || !code) {

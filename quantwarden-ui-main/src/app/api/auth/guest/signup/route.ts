@@ -9,7 +9,7 @@ import {
 } from "@/lib/guest-auth";
 
 /**
- * Guest (email-free) signup.
+ * Username (email-free) signup.
  *
  * Creates a username + password account. The user never sees or chooses an
  * email — we synthesize a deterministic one (`username@<GUEST_EMAIL_DOMAIN>`)
@@ -18,7 +18,7 @@ import {
 export async function POST(req: NextRequest) {
   try {
     if (!isGuestAuthEnabled()) {
-      return NextResponse.json({ error: "Guest accounts are disabled on this deployment." }, { status: 403 });
+      return NextResponse.json({ error: "Username accounts are disabled on this deployment." }, { status: 403 });
     }
 
     const body = await req.json().catch(() => ({}));
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
 
     return nextResponse;
   } catch (error) {
-    console.error("Guest signup error:", error);
+    console.error("Username signup error:", error);
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isEmailAuthEnabled } from "@/lib/mailer";
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -9,6 +10,10 @@ function isValidEmail(email: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!isEmailAuthEnabled()) {
+      return NextResponse.json({ error: "Email sign-in is disabled." }, { status: 403 });
+    }
+
     const body = await req.json();
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const callbackURL = typeof body.callbackURL === "string" && body.callbackURL.length > 0

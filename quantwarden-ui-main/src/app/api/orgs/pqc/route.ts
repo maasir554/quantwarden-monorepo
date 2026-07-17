@@ -29,6 +29,23 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    let initialScanPending = false;
+    try {
+      const workflowRows = await prisma.$queryRawUnsafe<Array<{ pending: boolean }>>(
+        `SELECT EXISTS (
+           SELECT 1
+             FROM "org_scan_workflow"
+            WHERE "organizationId" = $1
+              AND "workflowType" = 'onboarding'
+              AND status IN ('pending', 'running')
+         ) as pending`,
+        orgId
+      );
+      initialScanPending = Boolean(workflowRows[0]?.pending);
+    } catch {
+      // The workflow table is created lazily on older deployments.
+    }
+
     // Get the latest openssl scan result for each asset/port pair
     // Note: We use Postgres DISTINCT ON to get the most recent scan per pair
     const scansQuery = `
@@ -106,6 +123,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
+      initialScanPending,
       organization: {
         averageScore: orgAvgScore,
         tier: orgTier,

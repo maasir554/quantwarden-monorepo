@@ -12,6 +12,9 @@ RUN npm ci
 FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
+ARG EMAIL_AUTH_ENABLED=false
+ENV EMAIL_AUTH_ENABLED=$EMAIL_AUTH_ENABLED
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
@@ -30,8 +33,10 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 
+ARG EMAIL_AUTH_ENABLED=false
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV EMAIL_AUTH_ENABLED=$EMAIL_AUTH_ENABLED
 
 # Prisma's schema engine (used by `prisma db push` in the db-init service) needs
 # OpenSSL. The slim base image lacks it.

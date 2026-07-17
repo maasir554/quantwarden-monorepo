@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { getOrgMemberAccess } from "@/lib/org-scan-permissions";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
-import { isEmailConfigured, sendEmail } from "@/lib/mailer";
+import { isEmailAuthEnabled, sendEmail } from "@/lib/mailer";
 import { guestEmail, isGuestEmail, looksLikeEmail, validateUsername } from "@/lib/guest-auth";
 
 export async function POST(req: NextRequest) {
@@ -53,6 +53,10 @@ export async function POST(req: NextRequest) {
       let isGuestInvite: boolean;
 
       if (treatAsEmail) {
+        if (!isEmailAuthEnabled()) {
+          warnings.push(`${rawIdentifier}: email authentication is disabled; invite by username instead.`);
+          continue;
+        }
         targetEmail = rawIdentifier.toLowerCase();
         isGuestInvite = false;
       } else {
@@ -99,12 +103,8 @@ export async function POST(req: NextRequest) {
         );
         const isRegistered = userQuery.length > 0;
 
-        // Guest invites (and any invite when SMTP is unconfigured) are delivered
-        // through the recipient's in-app invitation inbox — no email is sent.
-        if (isGuestInvite || !isEmailConfigured()) {
-          if (!isGuestInvite && !isEmailConfigured()) {
-            warnings.push(`${targetEmail}: email not configured; invite is visible in their in-app inbox only.`);
-          }
+        // Username invitations are delivered through the in-app inbox.
+        if (isGuestInvite) {
           continue;
         }
 

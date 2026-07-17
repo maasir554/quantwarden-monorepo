@@ -3,10 +3,8 @@
  *
  * Single email transport for QuantWarden.
  *
- * Email is OPTIONAL. The app sends through a standard SMTP relay when one is
- * configured (e.g. a bank's internal mail gateway, or the bundled Mailpit
- * container for demos). When no SMTP host is configured the app runs fully via
- * guest (username + password) accounts and never attempts to send mail.
+ * Email is optional and off by default. It is available only when
+ * EMAIL_AUTH_ENABLED=true and an SMTP relay is configured.
  *
  * There are no third-party email SaaS dependencies here — just SMTP.
  */
@@ -28,6 +26,12 @@ let cachedTransport: Transporter | null = null;
  */
 export function isEmailConfigured(): boolean {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_HOST.trim());
+}
+
+/** Email sign-in and email invitations are opt-in, even when SMTP is present. */
+export function isEmailAuthEnabled(): boolean {
+  return String(process.env.EMAIL_AUTH_ENABLED || "").toLowerCase() === "true"
+    && isEmailConfigured();
 }
 
 export function getDefaultFromAddress(): string {

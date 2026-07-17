@@ -5,6 +5,19 @@ export type ScanHistoryCategory = "passed" | "timeout" | "dnsExpired" | "failed"
 export type ScanEngine = "openssl" | "portDiscovery" | "subdomainDiscovery";
 export type ScanBatchSource = "manual" | "scheduled" | "automated";
 export type ScanUpcomingStatus = "pending" | "queued";
+export type WorkflowStep = "subdomain_discovery" | "port_discovery" | "openssl" | "done";
+export type WorkflowStatus = "pending" | "running" | "completed" | "failed" | "skipped";
+
+export interface OrgScanWorkflowStatus {
+  id: string;
+  workflowType: "onboarding" | "asset_added";
+  currentStep: WorkflowStep;
+  status: WorkflowStatus;
+  activeBatchId: string | null;
+  triggerAssetId: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface ScanInitiator {
   id: string;
