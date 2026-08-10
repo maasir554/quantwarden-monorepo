@@ -159,7 +159,7 @@ function SignupForm() {
           return;
         }
 
-        window.location.href = data.redirectTo || callbackUrl;
+        setOtpScreen(true);
       } catch (error) {
         console.error(error);
         setSubmitError("Something went wrong. Please try again.");
@@ -176,7 +176,15 @@ function SignupForm() {
     setSubmitError("");
     setLoadingMagic(true);
     try {
-      await signIn.magicLink({ email: normalizedEmail, name: name.trim(), callbackURL: callbackUrl });
+      const { error } = await signIn.magicLink({
+        email: normalizedEmail,
+        name: name.trim(),
+        callbackURL: callbackUrl,
+      });
+      if (error) {
+        setSubmitError(error.message || "Unable to send a verification code.");
+        return;
+      }
       setOtpScreen(true);
     } catch (error) {
       console.error(error);
@@ -223,7 +231,14 @@ function SignupForm() {
   };
 
   const handleResend = async () => {
-    await signIn.magicLink({ email: email.trim().toLowerCase(), name: name.trim(), callbackURL: callbackUrl });
+    const { error } = await signIn.magicLink({
+      email: email.trim().toLowerCase(),
+      name: name.trim(),
+      callbackURL: callbackUrl,
+    });
+    if (error) {
+      throw new Error(error.message || "Unable to resend the verification code.");
+    }
   };
 
   const handleOtpVerified = (verifyUrl: string) => {
@@ -355,7 +370,7 @@ function SignupForm() {
         )}
         {isInviteSignup && (
           <p className="text-xs text-[#8a5d33] font-medium px-1 mt-1">
-            This invitation came from your email, so your address is already verified.
+            We will send a verification code to this invited address.
           </p>
         )}
       </div>

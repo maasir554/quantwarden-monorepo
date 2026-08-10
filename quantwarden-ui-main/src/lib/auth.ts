@@ -3,6 +3,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { organization, magicLink, username } from "better-auth/plugins";
 import { prisma } from "@/lib/prisma";
 import { isEmailAuthEnabled, sendEmail } from "@/lib/mailer";
+import { isGuestAuthEnabled } from "@/lib/guest-auth";
 
 function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -110,9 +111,9 @@ export const auth = betterAuth({
     provider: "postgresql", 
   }),
   emailAndPassword: {
-    // Enabled for username + password accounts. Email users have no
-    // credential account row, so they continue to use Magic Links + OTP only.
-    enabled: true,
+    // Needed only for the optional username/password deployment mode. Email
+    // users are created exclusively after Magic Link / OTP verification.
+    enabled: isGuestAuthEnabled(),
   },
   plugins: [
     username(),
@@ -156,6 +157,7 @@ export const auth = betterAuth({
           });
         } catch (error) {
           console.error("Failed to send magic link email:", error);
+          throw error;
         }
       },
     }),

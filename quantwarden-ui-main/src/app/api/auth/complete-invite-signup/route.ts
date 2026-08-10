@@ -1,58 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isEmailAuthEnabled } from "@/lib/mailer";
-
-function buildToken() {
-  return `${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "")}`;
-}
-
-function splitSetCookieHeader(setCookie: string) {
-  if (!setCookie) return [];
-
-  const result: string[] = [];
-  let start = 0;
-  let index = 0;
-
-  while (index < setCookie.length) {
-    if (setCookie[index] === ",") {
-      let lookahead = index + 1;
-
-      while (lookahead < setCookie.length && setCookie[lookahead] === " ") {
-        lookahead++;
-      }
-
-      while (
-        lookahead < setCookie.length &&
-        setCookie[lookahead] !== "=" &&
-        setCookie[lookahead] !== ";" &&
-        setCookie[lookahead] !== ","
-      ) {
-        lookahead++;
-      }
-
-      if (lookahead < setCookie.length && setCookie[lookahead] === "=") {
-        const part = setCookie.slice(start, index).trim();
-        if (part) result.push(part);
-        start = index + 1;
-
-        while (start < setCookie.length && setCookie[start] === " ") {
-          start++;
-        }
-
-        index = start;
-        continue;
-      }
-    }
-
-    index++;
-  }
-
-  const tail = setCookie.slice(start).trim();
-  if (tail) result.push(tail);
-
-  return result;
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -117,55 +67,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const token = buildToken();
-    const ctx = await auth.$context;
-
-    await ctx.internalAdapter.createVerificationValue({
-      identifier: token,
-      value: JSON.stringify({
+    // An invitation URL alone does not prove control of its email address.
+    // Send the same OTP / Magic Link used by ordinary email registration; the
+    // user is created only after Better Auth verifies that token.
+    await auth.api.signInMagicLink({
+      body: {
         email: invite.email.toLowerCase(),
         name,
-        attempt: 0,
-      }),
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        callbackURL: `/app/invites/${inviteId}`,
+      },
+      headers: await headers(),
     });
 
-    const baseUrl =
-      process.env.BETTER_AUTH_URL ||
-      process.env.NEXT_PUBLIC_APP_URL ||
-      new URL(req.url).origin;
-
-    const verifyUrl = new URL("/api/auth/magic-link/verify", baseUrl);
-    verifyUrl.searchParams.set("token", token);
-    verifyUrl.searchParams.set("callbackURL", `/app/invites/${inviteId}`);
-
-    const authResponse = await auth.handler(
-      new Request(verifyUrl.toString(), {
-        method: "GET",
-        headers: req.headers,
-      })
-    );
-
-    const redirectTo = authResponse.headers.get("location") || `/app/invites/${inviteId}`;
-    const nextResponse = NextResponse.json({ redirectTo });
-
-    const authHeaders = authResponse.headers as Headers & { getSetCookie?: () => string[] };
-    const setCookies = authHeaders.getSetCookie?.() || [];
-
-    if (setCookies.length === 0) {
-      const combinedSetCookie = authResponse.headers.get("set-cookie");
-      if (combinedSetCookie) {
-        for (const cookie of splitSetCookieHeader(combinedSetCookie)) {
-          nextResponse.headers.append("set-cookie", cookie);
-        }
-      }
-    } else {
-      for (const cookie of setCookies) {
-        nextResponse.headers.append("set-cookie", cookie);
-      }
-    }
-
-    return nextResponse;
+    return NextResponse.json({ status: true });
   } catch (error) {
     console.error("Complete invite signup error:", error);
     return NextResponse.json(
