@@ -1,0 +1,168 @@
+name: CI and Azure deployment
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  AZURE_VM_HOST: ${{ vars.AZURE_VM_HOST || '40.81.244.87' }}
+  AZURE_VM_USER: ${{ vars.AZURE_VM_USER || 'maasir554' }}
+  APP_URL: ${{ vars.APP_URL || 'https://quantwarden.online' }}
+
+jobs:
+  ui_checks:
+    name: UI and worker checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: quantwarden-ui-main
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: quantwarden-ui-main/.node-version
+          cache: npm
+          cache-dependency-path: quantwarden-ui-main/package-lock.json
+      - run: npm ci
+      - run: npm run worker:check
+      - run: npm run build
+        env:
+          DATABASE_URL: postgresql://build:build@127.0.0.1:5432/build
+          BETTER_AUTH_SECRET: build-only-secret-not-used-at-runtime
+
+  scanner_checks:
+    name: Scanner checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: quantwarden-backend-main/nmap-api/requirements.txt
+      - name: Test nmap API
+        working-directory: quantwarden-backend-main/nmap-api
+        run: |
+          python -m pip install -r requirements.txt
+          pytest
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: quantwarden-backend-main/subfinder-api/go.mod
+          cache-dependency-path: quantwarden-backend-main/subfinder-api/go.sum
+      - name: Build and test subfinder API
+        working-directory: quantwarden-backend-main/subfinder-api
+        run: go test ./...
+
+  publish_images:
+    name: Build and publish images
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [ui_checks, scanner_checks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_registry: ${{ steps.image_vars.outputs.registry }}
+      image_tag: ${{ steps.image_vars.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set image coordinates
+        id: image_vars
+        shell: bash
+        run: |
+          echo "registry=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "tag=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v4
+      - name: Build and push application images
+        env:
+          IMAGE_REGISTRY: ${{ steps.image_vars.outputs.registry }}
+          IMAGE_TAG: ${{ steps.image_vars.outputs.tag }}
+        run: >-
+          docker compose
+          -f docker-compose.yml
+          -f docker-compose.production.yml
+          build --pull --push
+
+  deploy:
+    name: Deploy to Azure VM
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event_name != 'pull_request' &&
+      vars.AZURE_DEPLOY_ENABLED == 'true'
+    needs: publish_images
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.AZURE_VM_SSH_KEY }}
+        shell: bash
+        run: |
+          test -n "$SSH_PRIVATE_KEY" || { echo "AZURE_VM_SSH_KEY is not configured"; exit 1; }
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/quantwarden_azure"
+          chmod 600 "$HOME/.ssh/quantwarden_azure"
+          ssh-keyscan -H "$AZURE_VM_HOST" >> "$HOME/.ssh/known_hosts"
+      - name: Upload deployment manifests
+        shell: bash
+        run: |
+          ssh -i "$HOME/.ssh/quantwarden_azure" "$AZURE_VM_USER@$AZURE_VM_HOST" \
+            "mkdir -p /srv/quantwarden/app/deploy"
+          scp -i "$HOME/.ssh/quantwarden_azure" \
+            docker-compose.yml docker-compose.production.yml \
+            "$AZURE_VM_USER@$AZURE_VM_HOST:/srv/quantwarden/app/"
+          scp -i "$HOME/.ssh/quantwarden_azure" deploy/Caddyfile \
+            "$AZURE_VM_USER@$AZURE_VM_HOST:/srv/quantwarden/app/deploy/Caddyfile"
+      - name: Authenticate VM to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          printf '%s' "$GHCR_TOKEN" | ssh -i "$HOME/.ssh/quantwarden_azure" \
+            "$AZURE_VM_USER@$AZURE_VM_HOST" \
+            "docker login ghcr.io -u '$GITHUB_ACTOR' --password-stdin"
+      - name: Pull and restart services
+        env:
+          IMAGE_REGISTRY: ${{ needs.publish_images.outputs.image_registry }}
+          IMAGE_TAG: ${{ needs.publish_images.outputs.image_tag }}
+        shell: bash
+        run: |
+          ssh -i "$HOME/.ssh/quantwarden_azure" "$AZURE_VM_USER@$AZURE_VM_HOST" \
+            "cd /srv/quantwarden/app && \
+             IMAGE_REGISTRY='$IMAGE_REGISTRY' IMAGE_TAG='$IMAGE_TAG' \
+             docker compose -f docker-compose.yml -f docker-compose.production.yml \
+             --profile production pull && \
+             IMAGE_REGISTRY='$IMAGE_REGISTRY' IMAGE_TAG='$IMAGE_TAG' \
+             docker compose -f docker-compose.yml -f docker-compose.production.yml \
+             --profile production up -d --no-build --remove-orphans"
+      - name: Verify production
+        shell: bash
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error "$APP_URL/api/auth/methods"; then
+              echo
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Production health check failed"
+          exit 1
