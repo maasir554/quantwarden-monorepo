@@ -1,0 +1,8 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy quantwarden-ui:3000
+}

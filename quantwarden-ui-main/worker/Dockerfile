@@ -6,7 +6,9 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
 
-RUN npm ci
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm ci
 
 FROM node:22-bookworm-slim AS build
 
@@ -32,7 +34,9 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
 
-RUN npm ci --omit=dev
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm ci --omit=dev
 
 COPY --from=build /app/worker/bootstrap.cjs ./worker/bootstrap.cjs
 COPY --from=build /app/worker/dist ./worker/dist

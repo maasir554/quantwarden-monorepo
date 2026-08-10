@@ -6,8 +6,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-quantwarden}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quantwarden_password}
       POSTGRES_DB: ${POSTGRES_DB:-quantwarden}
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -24,6 +24,7 @@ services:
     build:
       context: ./quantwarden-ui-main
       dockerfile: Dockerfile
+      target: db-init
     container_name: quantwarden-db-init
     command: ["npx", "prisma", "db", "push", "--accept-data-loss"]
     environment:
@@ -37,11 +38,12 @@ services:
     build:
       context: ./quantwarden-ui-main
       dockerfile: Dockerfile
+      target: runner
       args:
         EMAIL_AUTH_ENABLED: ${EMAIL_AUTH_ENABLED:-false}
     container_name: quantwarden-ui
     ports:
-      - "3000:3000"
+      - "${UI_BIND_ADDRESS:-0.0.0.0}:${UI_PORT:-3000}:3000"
     environment:
       DATABASE_URL: ${DATABASE_URL}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
@@ -69,15 +71,39 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # Production HTTPS entrypoint. Enable with `--profile production`.
+  # Caddy obtains and renews certificates after APP_DOMAIN points at this host.
+  caddy:
+    image: caddy:2-alpine
+    container_name: quantwarden-caddy
+    profiles: ["production"]
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      quantwarden-ui:
+        condition: service_started
+    restart: unless-stopped
+
   # Local SMTP catcher for demos: captures every email and shows it in a web UI
   # at http://localhost:8025 — no real mail server or credentials needed.
   # Optional local inbox. It does not enable email auth by itself.
   mailpit:
     image: axllent/mailpit:latest
     container_name: quantwarden-mailpit
+    profiles: ["email-demo"]
     ports:
-      - "8025:8025"   # web UI
-      - "1025:1025"   # SMTP
+      - "8025:8025"
+    expose:
+      - "1025"
     restart: unless-stopped
 
   quantwarden-worker:
@@ -85,6 +111,7 @@ services:
       context: ./quantwarden-ui-main
       dockerfile: worker/Dockerfile
     container_name: quantwarden-worker
+    init: true
     environment:
       DATABASE_URL: ${DATABASE_URL}
       OPENSSL_API_URL: ${OPENSSL_API_URL}
@@ -95,84 +122,61 @@ services:
       SCAN_WORKER_WAKE_SECRET: ${SCAN_WORKER_WAKE_SECRET}
       SCAN_WORKER_ACTIVE_EXECUTOR_TICK_MS: ${SCAN_WORKER_ACTIVE_EXECUTOR_TICK_MS}
       SCAN_WORKER_ACTIVE_SCHEDULER_TICK_MS: ${SCAN_WORKER_ACTIVE_SCHEDULER_TICK_MS}
-    ports:
-      - "${SCAN_WORKER_PORT:-8088}:${SCAN_WORKER_PORT:-8088}"
-      - "${SCAN_WORKER_HEALTH_PORT:-8089}:${SCAN_WORKER_HEALTH_PORT:-8089}"
+      SCAN_WORKER_MAX_CONCURRENT_JOBS: ${SCAN_WORKER_MAX_CONCURRENT_JOBS:-6}
+      SCAN_WORKER_MAX_CONCURRENT_JOBS_PER_ORG: ${SCAN_WORKER_MAX_CONCURRENT_JOBS_PER_ORG:-2}
+      OPENSSL_API_TIMEOUT_SECONDS: ${OPENSSL_API_TIMEOUT_SECONDS:-3}
+      OPENSSL_API_REQUEST_TIMEOUT_MS: ${OPENSSL_API_REQUEST_TIMEOUT_MS:-15000}
+      OPENSSL_API_PROBE_BATCH_SIZE: ${OPENSSL_API_PROBE_BATCH_SIZE:-10}
+    expose:
+      - "${SCAN_WORKER_PORT:-8088}"
+      - "${SCAN_WORKER_HEALTH_PORT:-8089}"
     depends_on:
       db:
         condition: service_healthy
       db-init:
         condition: service_completed_successfully
+      subfinder-api:
+        condition: service_started
+      nmap-api:
+        condition: service_started
+      openssl-api:
+        condition: service_started
     restart: unless-stopped
 
   subfinder-api:
     build:
       context: ./quantwarden-backend-main/subfinder-api
     container_name: quantwarden-subfinder-api
+    init: true
     environment:
       SUBFINDER_API_ADDR: ":8085"
-      ONEFORALL_API_URL: "http://oneforall-api:8002"
       FB_APP_ID: ${FB_APP_ID}
       FB_APP_SECRET: ${FB_APP_SECRET}
       VT_API_KEY: ${VT_API_KEY}
       SPYSE_API_TOKEN: ${SPYSE_API_TOKEN}
-    depends_on:
-      - oneforall-api
-    ports:
-      - "${SUBFINDER_PORT:-8085}:8085"
-    restart: unless-stopped
-
-  pyssl-api:
-    build:
-      context: ./quantwarden-backend-main/pyssl-api
-    container_name: quantwarden-pyssl-api
-    ports:
-      - "${PYSSL_PORT:-8000}:8000"
+    expose:
+      - "8085"
     restart: unless-stopped
 
   nmap-api:
     build:
       context: ./quantwarden-backend-main/nmap-api
     container_name: quantwarden-nmap-api
-    ports:
-      - "${NMAP_PORT:-8010}:8010"
+    init: true
+    expose:
+      - "8010"
     restart: unless-stopped
 
   openssl-api:
     build:
       context: ./quantwarden-backend-main/openssl-api
     container_name: quantwarden-openssl-api
-    ports:
-      - "${OPENSSL_PORT:-8020}:8020"
-    restart: unless-stopped
-
-  mcp-monorepo-server:
-    build:
-      context: ./quantwarden-backend-main/mcp-monorepo-server
-    container_name: quantwarden-mcp-server
-    environment:
-      ONEFORALL_API_URL: "http://oneforall-api:8002"
-      SUBFINDER_API_URL: "http://subfinder-api:8085"
-      PYSSL_API_URL: "http://pyssl-api:8000"
-      NMAP_API_URL: "http://nmap-api:8010"
-      OPENSSL_API_URL: "http://openssl-api:8020"
-    depends_on:
-      - subfinder-api
-      - pyssl-api
-      - nmap-api
-      - openssl-api
-    stdin_open: true
-    tty: true
-    restart: unless-stopped
-
-  oneforall-api:
-    build:
-      context: ./quantwarden-backend-main/one-for-all-subdomains
-      dockerfile: Dockerfile.api
-    container_name: quantwarden-oneforall-api
-    ports:
-      - "${ONEFORALL_PORT:-8002}:8002"
+    init: true
+    expose:
+      - "8020"
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:
