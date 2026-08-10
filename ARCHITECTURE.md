@@ -14,8 +14,8 @@ The submission bundle is **three deployment units with no shared build or worksp
 | Unit | Stack | Role |
 |---|---|---|
 | `quantwarden-ui-main/` | Next.js 15 (App Router) + Node 22 scan worker | Control plane (app) + execution plane (worker), sharing one `src/lib/` and one Prisma client |
-| `quantwarden-backend-main/` | Python FastAPI ×4 + Go ×1 | Stateless scan-engine microservices wrapping security CLIs/libraries |
-| `docker-compose.yml` (root) | — | Master orchestrator: db, db-init, UI, worker, Mailpit, 5 backend APIs, MCP server |
+| `quantwarden-backend-main/` | Python FastAPI ×2 + Go ×1 | Core stateless scan-engine services |
+| `docker-compose.yml` (root) | Compose | Seven-service default stack plus optional Mailpit profile |
 
 Coordination between units is **entirely via shared Postgres state plus a one-shot wake ping** — there is no direct RPC from app to worker for scan work. This was a deliberate choice to keep the app deployable on serverless platforms (Vercel) while scans run on a long-lived worker.
 
@@ -49,7 +49,7 @@ The executor dispatches by the `engine` field on `asset_scan_batch`:
 
 | `engine` | Runner | Backend service | Purpose |
 |---|---|---|---|
-| `subdomainDiscovery` | `subdomain-discovery-runner.ts` | subfinder-api (Go) → one-for-all-subdomains | Find subdomains of a root domain |
+| `subdomainDiscovery` | `subdomain-discovery-runner.ts` | subfinder-api (Go) | Find subdomains using Subfinder and Assetfinder sources |
 | `portDiscovery` | `port-discovery-runner.ts` | nmap-api (Python) | Probe open ports + resolve IP |
 | `openssl` (default) | `openssl-scan-runner.ts` | openssl-api (Python) | TLS/SSL handshake profiling |
 
@@ -100,6 +100,7 @@ The "queue" is not a separate broker — **Postgres itself is the queue**. `asse
 - **Per-org advisory lock** during batch *creation* (prevents duplicate batches).
 - **Per-org active-batch detection** in `createScanBatch` returns a 409 "already active" error path if you try to start a batch on assets already being scanned — the UI shows the lock banner via `activity.lock`.
 - **In-process `runningJobs` map** in the worker prevents double-launching the same scanId within one worker and drives the 5-min stale-recovery logic.
+- **Bounded execution** defaults to six global jobs and two jobs per organization, preventing one onboarding run from exhausting the scanner host.
 
 The `ScanActivityProvider` (React context) consumes this state via two channels:
 - **REST**: `GET /api/orgs/scans/activity?orgId=` returns the full `OrgScanActivityPayload` (active batches, queued count, upcoming scheduled runs, latest completed batch, recent history, all failures, lock state).
@@ -179,17 +180,15 @@ Plus penalties for weak/legacy findings. `src/lib/cbom.ts`, `pqc.ts`, and `repor
 
 ## 8. Backend microservices
 
-All five services are **stateless HTTP wrappers** around security CLIs/libraries, called by the worker (and optionally by the MCP server for AI agents):
+The three core services are stateless HTTP wrappers called by the worker:
 
 | Service | Language | Port | Wraps |
 |---|---|---|---|
-| nmap-api | Python/FastAPI | 8010 | `nmap` CLI (port discovery) |
+| nmap-api | Python/FastAPI | 8010 | Bounded asynchronous TCP port probes |
 | openssl-api | Python/FastAPI | 8020 | OpenSSL TLS profiling |
-| pyssl-api | Python/FastAPI | 8000 | Python SSL analysis |
-| subfinder-api | Go | 8085 | subfinder + assetfinder, calls one-for-all |
-| one-for-all-subdomains | Python/FastAPI | 8002 | OneForAll subdomain enumeration (vendored) |
+| subfinder-api | Go | 8085 | Subfinder plus built-in Assetfinder discovery |
 
-`mcp-monorepo-server/` exposes these as MCP tools (`nmap_security_intelligence`, `openssl_profile`, `subfinder_combined`, etc.) for AI agents. Service URLs are injected via env (`OPENSSL_API_URL`, `NMAP_API_URL`, `SUBFINDER_API_URL`).
+PySSL and `mcp-monorepo-server/` remain available only through the backend `developer-tools` profile. They are not part of the product runtime.
 
 > **Best practice — polyglot best-tool-for-job.** Each backend service uses the language that fits its wrapped tool: Go for subfinder's concurrency model, Python for FastAPI's speed-of-development on CLI wrappers, Node for the worker's shared TS codebase with the app. Services are stateless and independently deployable.
 
@@ -203,16 +202,17 @@ docker-compose up -d --build
         ├─ db (postgres:15) ────┐
         ├─ db-init (one-shot) ──┘  prisma db push; app+worker wait on service_completed_successfully
         ├─ quantwarden-ui (:3000)       depends_on: db-healthy, db-init-success
-        ├─ quantwarden-worker (:8088/:8089)  depends_on: db-healthy, db-init-success
-        ├─ mailpit (:8025/:1025)
-        ├─ nmap-api (:8010)  openssl-api (:8020)  pyssl-api (:8000)
-        ├─ subfinder-api (:8085) → oneforall-api (:8002)
-        └─ mcp-monorepo-server (internal)
+        ├─ quantwarden-worker (internal :8088/:8089)
+        ├─ nmap-api (internal :8010)
+        ├─ openssl-api (internal :8020)
+        └─ subfinder-api (internal :8085)
+
+email-demo profile: mailpit (:8025, internal SMTP :1025)
 ```
 
 The app/worker contract requires `SCAN_WORKER_WAKE_SECRET` to be **identical** on both sides, and `SCAN_WORKER_WAKE_URL` to point at `...:8088/internal/wake` (control port); health is on `8089` (`/healthz`).
 
-> **Best practice — one-command bring-up.** `cp .env.example .env && docker-compose up -d --build` starts the entire 10-container stack with a working demo config (Mailpit catches all email, guest auth enabled, internal service URLs pre-wired). The `db-init` one-shot provisions the schema before the app and worker start, so they never query a schemaless database.
+> **Best practice — one-command bring-up.** `cp .env.example .env && docker compose up -d --build` starts the seven-service core stack. The one-shot `db-init` provisions the schema before the app and worker start. Mailpit is opt-in through the `email-demo` profile.
 
 ---
 

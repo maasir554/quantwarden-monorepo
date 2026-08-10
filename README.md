@@ -1,88 +1,98 @@
 # QuantWarden Deployment Guide
 
-Run the full QuantWarden stack on a VM with Docker Compose.
+QuantWarden runs as a lean Docker Compose stack with a Next.js control plane, a background scan worker, PostgreSQL, and three internal scanning services.
 
 ## Prerequisites
-Install Docker and Docker Compose first.
 
-## How to Start the Project
+- Docker Engine
+- Docker Compose v2
+- A VM with at least 4 GB RAM recommended for multi-asset scans
 
-### 1. Extract the files
-Unzip the `pnbhack-submission.zip` file on your server.
-```bash
-unzip pnbhack-submission.zip -d quantwarden
-cd quantwarden
-```
+## Start the platform
 
-### 2. Create the configuration
 ```bash
 cp .env.example .env
-```
-The defaults use username/password authentication and require no email service.
-
-### 3. Launch the platform
-```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
-## Access
+Open `http://<server-ip>:3000`.
 
-Once the command finishes, you can access the platform:
-- **Web UI:** Open `http://<your-vm-ip>:3000` in your browser.
-- **Mailpit (optional email testing):** `http://<your-vm-ip>:8025`
-- **Backend APIs:** Various services are running on ports `8000`, `8002`, `8010`, `8020`, and `8085`.
+Before deployment, replace `BETTER_AUTH_SECRET` and `SCAN_WORKER_WAKE_SECRET` in `.env`. Set `NEXT_PUBLIC_APP_URL` and `BETTER_AUTH_URL` to the URL users will open.
 
-> Auth URLs default to `http://localhost:3000`. If you access the app from another machine, set `NEXT_PUBLIC_APP_URL` and `BETTER_AUTH_URL` in `.env` to `http://<your-vm-ip>:3000` (or use an SSH tunnel) before `docker-compose up`.
+## Default services
 
-## Authentication & Email
-
-Username/password is the default and only visible sign-in method. Username invitations appear in the recipient's in-app inbox. An organization admin can reset a username account's password from Team Management.
-
-Email OTP/magic-link authentication is optional. To enable it, set `EMAIL_AUTH_ENABLED=true`, configure SMTP, and rebuild:
-
-```bash
-docker-compose up -d --build
-```
-
-| Variable | Meaning |
+| Service | Purpose |
 | --- | --- |
-| `USERNAME_AUTH_ENABLED` | Username/password sign-in; default `true`. |
-| `USERNAME_EMAIL_DOMAIN` | Internal synthetic-email domain; default `guest.local`. |
-| `EMAIL_AUTH_ENABLED` | Enables email sign-in and email invitations; default `false`. |
-| `SMTP_HOST` | SMTP relay host. |
-| `SMTP_PORT` | SMTP port (default `587`; Mailpit uses `1025`). |
-| `SMTP_SECURE` | `true` for implicit TLS (port 465), else STARTTLS. |
-| `SMTP_USER` / `SMTP_PASS` | Optional — many internal relays need no auth. |
-| `SMTP_FROM` | From address for outgoing mail. |
+| `quantwarden-ui` | Next.js portal and authenticated API |
+| `quantwarden-worker` | Scan scheduling, execution, and workflow progression |
+| `db` | PostgreSQL data store |
+| `db-init` | One-time Prisma schema provisioning |
+| `subfinder-api` | Subfinder and Assetfinder subdomain discovery |
+| `nmap-api` | TCP port discovery |
+| `openssl-api` | TLS, certificate, and PQC analysis |
 
-## Common Management Commands
+Only port `3000` is published by default. PostgreSQL, the worker, and scanning APIs communicate over the private Compose network.
 
-### View services
+## PDF reporting
+
+The Reporting screen generates PDFs entirely on the `quantwarden-ui` server. The browser sends the selected title, subtitle, and report sections; the authenticated API queries fresh scan data and compiles a native A4 document with LaTeX. The Docker image includes `pdflatex`, so there is no browser canvas capture or HTML-to-image rendering step.
+
+After changing reporting code or the LaTeX template, rebuild the UI container:
+
 ```bash
-docker-compose ps
+docker compose up -d --build quantwarden-ui
 ```
 
-### View logs
+Local development outside Docker requires a `pdflatex` binary on `PATH`. Set `LATEX_BIN` only when the executable is installed at a non-standard path.
+
+OneForAll is not part of the stack. Subdomain discovery uses the Go Subfinder service and its built-in Assetfinder source.
+
+## Authentication and email
+
+Username and password authentication is enabled by default and requires no email infrastructure.
+
+Email authentication is optional. For a real deployment, set `EMAIL_AUTH_ENABLED=true` and configure an SMTP relay in `.env`, then rebuild the UI.
+
+For local email testing, start the `email-demo` profile:
+
 ```bash
-docker-compose logs -f
+docker compose --profile email-demo up -d --build
 ```
 
-### Stop
+Mailpit is then available at `http://<server-ip>:8025`.
+
+## Scan concurrency
+
+The worker uses bounded concurrency to prevent large onboarding scans from exhausting the host.
+
+| Variable | Default | Purpose |
+| --- | ---: | --- |
+| `SCAN_WORKER_MAX_CONCURRENT_JOBS` | `6` | Maximum scan items running across all organizations |
+| `SCAN_WORKER_MAX_CONCURRENT_JOBS_PER_ORG` | `2` | Maximum scan items running for one organization |
+| `OPENSSL_API_PROBE_BATCH_SIZE` | `10` | Maximum parallel OpenSSL probes within one scan item |
+
+Lower these values on small VMs. Increase them only after monitoring CPU, memory, file descriptors, and scan duration.
+
+## Management commands
+
 ```bash
-docker-compose stop
+docker compose ps
+docker compose logs -f
+docker compose stop
+docker compose down
+docker compose up -d --build
 ```
 
-### Remove containers
+To inspect an internal service:
+
 ```bash
-docker-compose down
+docker compose exec quantwarden-worker node -e "fetch('http://127.0.0.1:8089/healthz').then(r => r.text()).then(console.log)"
+docker compose exec nmap-api python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8010/').read().decode())"
 ```
 
-### Rebuild after changes
-```bash
-docker-compose up -d --build
-```
+## Project structure
 
-## Project Structure
-- `quantwarden-ui-main/`: Next.js Frontend & Scan Worker.
-- `quantwarden-backend-main/`: Python & Go Microservices (Nmap, OpenSSL, Subfinder, etc.).
-- `docker-compose.yml`: The master controller for the entire stack.
+- `quantwarden-ui-main/`: Next.js portal and Node.js scan worker
+- `quantwarden-backend-main/`: Go and Python scanning services
+- `docker-compose.yml`: Production-oriented Compose stack
+- `USER_GUIDE.md`: End-user operating guide

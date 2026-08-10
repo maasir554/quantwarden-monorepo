@@ -8,6 +8,7 @@ This repo handles:
 - manual scan creation
 - scheduled scan creation
 - live scan activity over SSE
+- server-side LaTeX PDF reporting
 
 Long-running scan execution does not run inside Vercel. It is handled by the dedicated worker container documented in [`worker/README.md`](worker/README.md).
 
@@ -44,6 +45,8 @@ Run the app locally:
 ```bash
 npm run dev
 ```
+
+PDF export requires `pdflatex` on `PATH` when running locally. The production Docker image installs the required TeX Live packages automatically. Report generation runs in the authenticated reporting API and does not render or capture HTML in the browser.
 
 ## App Environment
 
@@ -104,6 +107,8 @@ SCAN_WORKER_IDLE_EXECUTOR_TICK_MS=1800000
 SCAN_WORKER_IDLE_SCHEDULER_TICK_MS=1800000
 SCAN_WORKER_ACTIVE_GRACE_MS=60000
 SCAN_WORKER_ACTIVE_ORG_LIMIT=100
+SCAN_WORKER_MAX_CONCURRENT_JOBS=6
+SCAN_WORKER_MAX_CONCURRENT_JOBS_PER_ORG=2
 ```
 
 Behavior of those defaults:

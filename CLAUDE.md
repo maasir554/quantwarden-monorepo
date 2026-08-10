@@ -6,20 +6,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 QuantWarden is a post-quantum cryptography (PQC) attack-surface scanner. Users register organizations, add assets (domains/hosts), and run scans that discover subdomains, probe open ports, and analyze TLS/SSL posture for quantum-readiness (ML-KEM key exchange, etc.). Results roll up into a CBOM (Cryptographic Bill of Materials), PQC scores, and reports.
 
-This is a **submission bundle of two independent repos** plus a master compose file:
+This is a Git repository containing two application directories plus a master Compose file:
 
 - `quantwarden-ui-main/` — Next.js 15 control plane + a Node scan worker (execution plane). These share the same `src/lib` codebase and Prisma client.
 - `quantwarden-backend-main/` — A polyglot monorepo of stateless scan microservices (Python FastAPI + one Go service).
-- `docker-compose.yml` (root) — Master orchestrator that builds and wires everything together; see `README_DEPLOY.md`.
+- `docker-compose.yml` (root) — Master orchestrator that builds and wires everything together; see `README.md`.
 
-There is no top-level git repo or shared build. Each sub-repo is developed and built on its own.
+The UI and backend retain separate build systems even though they share the root repository.
 
 ## Run / build / test
 
 ### Whole stack (root)
 ```bash
 cp .env.example .env          # defaults already work for internal Docker networking
-docker-compose up -d --build  # UI :3000, worker :8088/:8089, APIs :8000 :8002 :8010 :8020 :8085
+docker compose up -d --build  # UI :3000; worker and scanner APIs stay on the private Compose network
 ```
 
 ### UI + worker (`quantwarden-ui-main/`)
@@ -35,7 +35,7 @@ There is no UI test runner configured. The worker has no separate test suite.
 
 ### Backend services (`quantwarden-backend-main/`)
 ```bash
-python3 start_monorepo_servers.py          # launches all Python+Go services, auto-resolves port conflicts
+python3 start_monorepo_servers.py          # launches the three core scanner services
 python3 start_monorepo_servers.py --setup  # interactive port selection
 ```
 Run a single service manually, e.g. nmap-api:
@@ -43,7 +43,7 @@ Run a single service manually, e.g. nmap-api:
 cd quantwarden-backend-main/nmap-api
 python3 -m uvicorn main:app --host 0.0.0.0 --port 8010 --reload
 ```
-The Go subfinder service: `cd subfinder-api && ONEFORALL_API_URL=http://127.0.0.1:8002 SUBFINDER_API_ADDR=:8085 go run .`
+The Go subfinder service: `cd subfinder-api && SUBFINDER_API_ADDR=:8085 go run .`
 
 nmap-api is the only service with tests: `cd quantwarden-backend-main/nmap-api && pytest`.
 
@@ -64,10 +64,10 @@ After each batch step completes, the worker advances per-org workflows stored in
 - `asset_added`: port_discovery → openssl → done
 
 ### Shared-code coupling (important)
-The worker is **not** a separate package. `worker/tsconfig.json` sets `baseUrl: ".."` with `@/* → src/*` and includes `../src/lib/**/*.ts`, so the worker imports the same `src/lib/*` modules and the same `src/lib/prisma.ts` client the app uses. `worker/bootstrap.cjs` rewrites the `@/` alias at runtime and loads `.env.worker`. **Editing anything in `src/lib/` affects both the app and the worker.**
+The worker is **not** a separate package. `worker/tsconfig.json` sets `baseUrl: ".."` with `@/* → src/*` and includes `../src/lib/**/*.ts`, so the worker imports the same `src/lib/*` modules and the same `src/lib/prisma.ts` client the app uses. `worker/bootstrap.cjs` rewrites the `@/` alias at runtime and loads `.env` plus `.env.local`. **Editing anything in `src/lib/` affects both the app and the worker.**
 
 ### Backend microservices
-All are stateless HTTP wrappers around security CLIs/libraries, called by the worker (and optionally by the MCP server). FastAPI services expose their schemas under `src/<service>/`. `mcp-monorepo-server/` exposes these same APIs as MCP tools (`nmap_security_intelligence`, `openssl_profile`, `subfinder_combined`, etc.) for AI agents. Service URLs are injected via env (`OPENSSL_API_URL`, `NMAP_API_URL`, `SUBFINDER_API_URL`, ...).
+The core backend contains the Go Subfinder API plus Python port-discovery and OpenSSL APIs. They are stateless and called by the worker. PySSL and the MCP bridge are retained only as optional developer tools in the backend Compose profile.
 
 ## Data & domain layer
 
@@ -85,5 +85,5 @@ All are stateless HTTP wrappers around security CLIs/libraries, called by the wo
 ## Config & env notes
 
 - The app/worker contract requires `SCAN_WORKER_WAKE_SECRET` to be **identical** on both sides, and `SCAN_WORKER_WAKE_URL` on the app to point at the worker's control port (`8088`). Worker health is on `8089` (`/healthz`).
-- `next.config.ts` deliberately separates dev (`.next-dev`) and prod (`.next`) build dirs to avoid chunk/cache conflicts.
+- `next.config.ts` separates dev (`.next-dev`) and prod (`.next`) build dirs and emits standalone production output for the runtime image.
 - Templates: root `.env.example`, `quantwarden-ui-main/.env.worker.example`, `quantwarden-backend-main/.env.docker.example`. Worker polling cadence and OpenSSL probe batching are tuned via the `SCAN_WORKER_*` and `OPENSSL_API_*` vars documented in `quantwarden-ui-main/worker/README.md`.
