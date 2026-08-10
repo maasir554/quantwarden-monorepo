@@ -8,21 +8,17 @@ import { isEmailAuthEnabled } from "@/lib/mailer";
 async function handler(req: Request) {
   const path = new URL(req.url).pathname;
 
-  // Public email/password endpoints are never part of QuantWarden's auth
-  // contract. Username signup goes through the guarded guest endpoint, while
-  // real email accounts must prove ownership through OTP / Magic Link first.
-  const blockedPasswordPaths = [
-    "/api/auth/sign-up/email",
-    "/api/auth/sign-in/email",
-  ];
-  if (blockedPasswordPaths.some((blockedPath) => path.endsWith(blockedPath))) {
-    return Response.json({ error: "Password-based email authentication is disabled." }, { status: 403 });
+  // Email accounts must always be created through OTP / Magic Link. Once
+  // verified, they may attach a password and use the normal email sign-in.
+  if (path.endsWith("/api/auth/sign-up/email")) {
+    return Response.json({ error: "Email accounts require verification before creation." }, { status: 403 });
   }
 
   if (!isEmailAuthEnabled()) {
     const blockedEmailPaths = [
       "/api/auth/sign-in/magic-link",
       "/api/auth/magic-link/verify",
+      "/api/auth/sign-in/email",
     ];
 
     if (blockedEmailPaths.some((blockedPath) => path.endsWith(blockedPath))) {

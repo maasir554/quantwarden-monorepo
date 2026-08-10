@@ -70,11 +70,13 @@ export async function POST(req: NextRequest) {
     // An invitation URL alone does not prove control of its email address.
     // Send the same OTP / Magic Link used by ordinary email registration; the
     // user is created only after Better Auth verifies that token.
+    const invitationCallback = `/app/invites/${inviteId}`;
     await auth.api.signInMagicLink({
       body: {
         email: invite.email.toLowerCase(),
         name,
-        callbackURL: `/app/invites/${inviteId}`,
+        callbackURL: invitationCallback,
+        newUserCallbackURL: `/auth/set-password?callbackUrl=${encodeURIComponent(invitationCallback)}`,
       },
       headers: await headers(),
     });

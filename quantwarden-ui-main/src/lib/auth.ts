@@ -111,9 +111,11 @@ export const auth = betterAuth({
     provider: "postgresql", 
   }),
   emailAndPassword: {
-    // Needed only for the optional username/password deployment mode. Email
-    // users are created exclusively after Magic Link / OTP verification.
-    enabled: isGuestAuthEnabled(),
+    // Public email signup remains blocked by the auth route. Enabling the
+    // credential provider lets a verified email user optionally attach a
+    // password after their Magic Link / OTP registration completes.
+    enabled: isGuestAuthEnabled() || isEmailAuthEnabled(),
+    requireEmailVerification: isEmailAuthEnabled() && !isGuestAuthEnabled(),
   },
   plugins: [
     username(),

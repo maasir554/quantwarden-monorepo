@@ -36,6 +36,7 @@ function SignupForm() {
     return match ? rawCallbackUrl : null;
   }, [inviteId, rawCallbackUrl]);
   const callbackUrl = inviteCallbackUrl || rawCallbackUrl || "/app";
+  const passwordSetupUrl = `/auth/set-password?callbackUrl=${encodeURIComponent(callbackUrl)}`;
   const { data: sessionData, isPending: sessionLoading } = useSession();
   const [methods, setMethods] = useState<AuthMethods | null>(null);
   const [mode, setMode] = useState<"email" | "username">("username");
@@ -180,6 +181,7 @@ function SignupForm() {
         email: normalizedEmail,
         name: name.trim(),
         callbackURL: callbackUrl,
+        newUserCallbackURL: passwordSetupUrl,
       });
       if (error) {
         setSubmitError(error.message || "Unable to send a verification code.");
@@ -235,6 +237,7 @@ function SignupForm() {
       email: email.trim().toLowerCase(),
       name: name.trim(),
       callbackURL: callbackUrl,
+      newUserCallbackURL: passwordSetupUrl,
     });
     if (error) {
       throw new Error(error.message || "Unable to resend the verification code.");

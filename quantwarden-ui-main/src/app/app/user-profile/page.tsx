@@ -8,6 +8,7 @@ import {
   BadgeCheck,
   Check,
   Clock3,
+  KeyRound,
   Loader2,
   Mail,
   Trash2,
@@ -82,6 +83,14 @@ export default function UserProfilePage() {
   const [deleteEmailInput, setDeleteEmailInput] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [passwordStatusLoading, setPasswordStatusLoading] = useState(true);
+  const [hasPassword, setHasPassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState("");
 
   useEffect(() => {
     if (!sessionLoading && !sessionData?.session) {
@@ -116,6 +125,20 @@ export default function UserProfilePage() {
     if (!sessionLoading && sessionData?.session) {
       loadInvitations();
     }
+  }, [sessionLoading, sessionData?.session]);
+
+  useEffect(() => {
+    if (sessionLoading || !sessionData?.session) return;
+
+    setPasswordStatusLoading(true);
+    fetch("/api/user/password", { cache: "no-store" })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Could not load password status.");
+        setHasPassword(Boolean(data.hasPassword));
+      })
+      .catch((error: Error) => setPasswordError(error.message))
+      .finally(() => setPasswordStatusLoading(false));
   }, [sessionLoading, sessionData?.session]);
 
   const hasNameChanges = useMemo(
@@ -206,6 +229,41 @@ export default function UserProfilePage() {
       setDeleteError(error?.message || "Could not delete profile.");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleSavePassword = async () => {
+    setPasswordError("");
+    setPasswordMessage("");
+
+    if (newPassword.length < 8) {
+      setPasswordError("Password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("The new passwords do not match.");
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const res = await fetch("/api/user/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not update password.");
+
+      setHasPassword(true);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordMessage(hasPassword ? "Password updated successfully." : "Password added successfully.");
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : "Could not update password.");
+    } finally {
+      setPasswordSaving(false);
     }
   };
 
@@ -339,6 +397,78 @@ export default function UserProfilePage() {
             )}
           </section>
         </div>
+
+        <section className="rounded-2xl border border-white/55 bg-white/75 backdrop-blur-md p-5 shadow-lg shadow-[#8B0000]/8">
+          <div className="flex items-center gap-2 mb-2">
+            <KeyRound className="w-4 h-4 text-[#8B0000]" />
+            <h2 className="text-lg font-bold text-[#3d200a]">Password</h2>
+          </div>
+          <p className="text-sm text-[#6f4827] mb-5">
+            {hasPassword
+              ? "Change your password. Your current password is required."
+              : "Add an optional password, or keep using email verification codes."}
+          </p>
+
+          {passwordStatusLoading ? (
+            <Loader2 className="w-6 h-6 animate-spin text-[#8B0000]" />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {hasPassword ? (
+                <div>
+                  <label className="text-xs uppercase tracking-widest text-[#8a5d33] mb-1 block">Current password</label>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(event) => { setCurrentPassword(event.target.value); setPasswordError(""); }}
+                    className="w-full rounded-xl border border-[#8B0000]/30 bg-white px-3 py-2.5 text-[#3d200a] outline-none focus:ring-2 focus:ring-[#8B0000]/30"
+                  />
+                </div>
+              ) : null}
+              <div>
+                <label className="text-xs uppercase tracking-widest text-[#8a5d33] mb-1 block">New password</label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(event) => { setNewPassword(event.target.value); setPasswordError(""); }}
+                  placeholder="At least 8 characters"
+                  className="w-full rounded-xl border border-[#8B0000]/30 bg-white px-3 py-2.5 text-[#3d200a] outline-none focus:ring-2 focus:ring-[#8B0000]/30"
+                />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-widest text-[#8a5d33] mb-1 block">Retype new password</label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(event) => { setConfirmPassword(event.target.value); setPasswordError(""); }}
+                  placeholder="Enter it again"
+                  className="w-full rounded-xl border border-[#8B0000]/30 bg-white px-3 py-2.5 text-[#3d200a] outline-none focus:ring-2 focus:ring-[#8B0000]/30"
+                />
+              </div>
+            </div>
+          )}
+
+          {passwordError ? <p className="text-sm text-[#8B0000] mt-3">{passwordError}</p> : null}
+          {passwordMessage ? <p className="text-sm text-emerald-700 mt-3">{passwordMessage}</p> : null}
+
+          {!passwordStatusLoading ? (
+            <button
+              onClick={handleSavePassword}
+              disabled={
+                passwordSaving ||
+                (hasPassword && !currentPassword) ||
+                newPassword.length < 8 ||
+                confirmPassword.length < 8
+              }
+              className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-[#8B0000] px-5 py-2.5 text-white font-semibold hover:bg-[#730000] disabled:opacity-50"
+            >
+              {passwordSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+              {hasPassword ? "Update Password" : "Set Password"}
+            </button>
+          ) : null}
+        </section>
 
         <section className="rounded-2xl border border-white/55 bg-white/75 backdrop-blur-md p-5 shadow-lg shadow-[#8B0000]/8">
           <div className="flex items-center gap-2 mb-4">

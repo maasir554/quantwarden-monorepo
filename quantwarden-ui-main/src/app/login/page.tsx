@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { signIn, signOut, useSession } from "@/lib/auth-client";
-import { Loader2, Shield, LogOut, LayoutDashboard, Mail, User } from "lucide-react";
+import { Loader2, Shield, LogOut, LayoutDashboard, LockKeyhole, Mail, User } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import OtpInput from "@/components/ui/otp-input";
 
@@ -22,6 +22,9 @@ function LoginForm() {
   const [loadingMagic, setLoadingMagic] = useState(false);
   const [otpScreen, setOtpScreen] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [emailMethod, setEmailMethod] = useState<"code" | "password">("code");
+  const [emailPassword, setEmailPassword] = useState("");
+  const [loadingEmailPassword, setLoadingEmailPassword] = useState(false);
 
   // Username + password login
   const [username, setUsername] = useState("");
@@ -98,6 +101,32 @@ function LoginForm() {
 
     if (!res.ok) {
       throw new Error(data.error || "Unable to resend the verification code.");
+    }
+  };
+
+  const handleEmailPasswordLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!isValidEmail(normalizedEmail) || !emailPassword) return;
+
+    setSubmitError("");
+    setLoadingEmailPassword(true);
+    try {
+      const { error } = await signIn.email({
+        email: normalizedEmail,
+        password: emailPassword,
+        callbackURL: callbackUrl,
+      });
+      if (error) {
+        setSubmitError(error.message || "Invalid email or password.");
+        return;
+      }
+      window.location.href = callbackUrl;
+    } catch (caught) {
+      console.error(caught);
+      setSubmitError("Something went wrong. Please try again.");
+    } finally {
+      setLoadingEmailPassword(false);
     }
   };
 
@@ -255,7 +284,30 @@ function LoginForm() {
                 )}
 
                 {effectiveMode === "email" && methods.email && (
-                  <form onSubmit={handleSendCode} className="space-y-5">
+                  <form
+                    onSubmit={emailMethod === "code" ? handleSendCode : handleEmailPasswordLogin}
+                    className="space-y-5"
+                  >
+                    <div className="grid grid-cols-2 gap-2 rounded-xl border border-amber-500/20 bg-[#fdf1df] p-1">
+                      <button
+                        type="button"
+                        onClick={() => { setEmailMethod("code"); setSubmitError(""); }}
+                        className={`rounded-lg py-2 text-sm font-bold transition-all ${
+                          emailMethod === "code" ? "bg-white text-[#8B0000] shadow-sm" : "text-[#8a5d33]"
+                        }`}
+                      >
+                        Email code
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setEmailMethod("password"); setSubmitError(""); }}
+                        className={`rounded-lg py-2 text-sm font-bold transition-all ${
+                          emailMethod === "password" ? "bg-white text-[#8B0000] shadow-sm" : "text-[#8a5d33]"
+                        }`}
+                      >
+                        Password
+                      </button>
+                    </div>
                     <div className="space-y-1.5">
                       <label htmlFor="email" className="text-xs font-bold text-[#8a5d33] uppercase tracking-wider px-1">
                         Email Address <span className="text-red-600">*</span>
@@ -279,17 +331,45 @@ function LoginForm() {
                       {emailError && (
                         <p className="text-xs text-red-600 font-medium px-1 mt-1">Please enter a valid email address.</p>
                       )}
-                      {!emailError && submitError && (
-                        <p className="text-xs text-red-600 font-medium px-1 mt-1">{submitError}</p>
-                      )}
                     </div>
+
+                    {emailMethod === "password" ? (
+                      <div className="space-y-1.5">
+                        <label htmlFor="email-password" className="text-xs font-bold text-[#8a5d33] uppercase tracking-wider px-1">
+                          Password <span className="text-red-600">*</span>
+                        </label>
+                        <input
+                          id="email-password"
+                          type="password"
+                          autoComplete="current-password"
+                          value={emailPassword}
+                          onChange={(e) => { setEmailPassword(e.target.value); setSubmitError(""); }}
+                          placeholder="Your password"
+                          className="w-full bg-white border border-amber-500/30 rounded-xl px-4 py-3.5 text-[#3d200a] placeholder:text-[#8a5d33]/50 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/50 focus:border-transparent transition-all shadow-sm"
+                        />
+                      </div>
+                    ) : null}
+
+                    {!emailError && submitError ? (
+                      <p className="text-xs text-red-600 font-medium px-1 -mt-1">{submitError}</p>
+                    ) : null}
 
                     <button
                       type="submit"
-                      disabled={loadingMagic || !email || emailError}
+                      disabled={
+                        loadingMagic ||
+                        loadingEmailPassword ||
+                        !email ||
+                        emailError ||
+                        (emailMethod === "password" && !emailPassword)
+                      }
                       className="w-full flex items-center justify-center bg-[#8B0000] text-white py-4 px-6 rounded-xl font-bold text-base hover:bg-[#730000] transition-all hover:shadow-lg hover:shadow-[#8B0000]/20 active:scale-[0.98] disabled:opacity-50"
                     >
-                      {loadingMagic ? <Loader2 className="w-5 h-5 animate-spin" /> : "Send Verification Code"}
+                      {loadingMagic || loadingEmailPassword ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : emailMethod === "password" ? (
+                        <span className="inline-flex items-center gap-2"><LockKeyhole className="w-5 h-5" /> Sign in with password</span>
+                      ) : "Send Verification Code"}
                     </button>
                   </form>
                 )}
