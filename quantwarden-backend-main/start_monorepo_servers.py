@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Monorepo launcher for OneForAll API, Subfinder API, PySSL API, Nmap API, and OpenSSL API."""
+"""Monorepo launcher for the Subfinder, port discovery, and OpenSSL APIs."""
 
 from __future__ import annotations
 
@@ -16,9 +16,7 @@ from pathlib import Path
 from typing import Dict, List
 
 ROOT = Path(__file__).resolve().parent
-ONEFORALL_DIR = ROOT / "one-for-all-subdomains"
 SUBFINDER_DIR = ROOT / "subfinder-api"
-PYSSL_DIR = ROOT / "pyssl-api"
 NMAP_DIR = ROOT / "nmap-api"
 OPENSSL_DIR = ROOT / "openssl-api"
 
@@ -26,8 +24,6 @@ COLOR_RESET = "\033[0m"
 COLOR_RED = "\033[31m"
 COLOR_GREEN = "\033[32m"
 COLOR_YELLOW = "\033[33m"
-COLOR_BLUE = "\033[34m"
-COLOR_MAGENTA = "\033[35m"
 COLOR_CYAN = "\033[36m"
 COLOR_BOLD = "\033[1m"
 
@@ -68,37 +64,25 @@ def log_setup(message: str) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Start OneForAll API, Subfinder API, PySSL API, Nmap API, and OpenSSL API with auto port management."
+        description="Start Subfinder API, Nmap API, and OpenSSL API with auto port management."
     )
     parser.add_argument("--setup", action="store_true", help="Interactive setup wizard.")
     parser.add_argument("--host", default="127.0.0.1", help="Host for URL display and port checks.")
 
-    parser.add_argument("--oneforall-port", type=int, default=8002, help="Preferred OneForAll API port.")
     parser.add_argument("--subfinder-port", type=int, default=8085, help="Preferred Subfinder API port.")
-    parser.add_argument("--pyssl-port", type=int, default=8000, help="Preferred PySSL API port.")
     parser.add_argument("--nmap-port", type=int, default=8010, help="Preferred Nmap API port.")
     parser.add_argument("--openssl-port", type=int, default=8020, help="Preferred OpenSSL API port.")
 
     parser.add_argument(
         "--persist-env",
         action="store_true",
-        help="Write resolved ONEFORALL_API_URL and SUBFINDER_API_ADDR into subfinder-api/.env.",
+        help="Write the resolved SUBFINDER_API_ADDR into subfinder-api/.env.",
     )
 
     parser.add_argument(
         "--python-cmd",
         default="python3",
         help="Fallback Python command when a service virtualenv is not found.",
-    )
-    parser.add_argument(
-        "--oneforall-python",
-        default="",
-        help="Explicit Python executable for OneForAll service.",
-    )
-    parser.add_argument(
-        "--pyssl-python",
-        default="",
-        help="Explicit Python executable for PySSL service.",
     )
     parser.add_argument(
         "--nmap-python",
@@ -352,42 +336,29 @@ def main() -> int:
 
     if args.setup:
         log_setup("Interactive setup started")
-        args.oneforall_port = ask_port("OneForAll API", args.oneforall_port)
         args.subfinder_port = ask_port("Subfinder API", args.subfinder_port)
-        args.pyssl_port = ask_port("PySSL API", args.pyssl_port)
         args.nmap_port = ask_port("Nmap API", args.nmap_port)
         args.openssl_port = ask_port("OpenSSL API", args.openssl_port)
         args.persist_env = ask_yes_no("Persist Subfinder .env updates", args.persist_env)
 
-    oneforall_port = resolve_port(args.host, args.oneforall_port, "OneForAll API")
     subfinder_port = resolve_port(args.host, args.subfinder_port, "Subfinder API")
 
-    pyssl_candidate = args.pyssl_port
-    if pyssl_candidate in {oneforall_port, subfinder_port}:
-        log_warn(
-            f"PySSL preferred port {pyssl_candidate} conflicts with another service; selecting a free port automatically"
-        )
-    pyssl_port = resolve_port(args.host, pyssl_candidate, "PySSL API")
-    if pyssl_port in {oneforall_port, subfinder_port}:
-        pyssl_port = resolve_port(args.host, pyssl_port + 1, "PySSL API")
-
     nmap_candidate = args.nmap_port
-    if nmap_candidate in {oneforall_port, subfinder_port, pyssl_port}:
+    if nmap_candidate == subfinder_port:
         log_warn(f"Nmap preferred port {nmap_candidate} conflicts with another service; selecting a free port automatically")
     nmap_port = resolve_port(args.host, nmap_candidate, "Nmap API")
-    while nmap_port in {oneforall_port, subfinder_port, pyssl_port}:
+    while nmap_port == subfinder_port:
         nmap_port = resolve_port(args.host, nmap_port + 1, "Nmap API")
 
     openssl_candidate = args.openssl_port
-    if openssl_candidate in {oneforall_port, subfinder_port, pyssl_port, nmap_port}:
+    if openssl_candidate in {subfinder_port, nmap_port}:
         log_warn(
             f"OpenSSL preferred port {openssl_candidate} conflicts with another service; selecting a free port automatically"
         )
     openssl_port = resolve_port(args.host, openssl_candidate, "OpenSSL API")
-    while openssl_port in {oneforall_port, subfinder_port, pyssl_port, nmap_port}:
+    while openssl_port in {subfinder_port, nmap_port}:
         openssl_port = resolve_port(args.host, openssl_port + 1, "OpenSSL API")
 
-    oneforall_url = f"http://{args.host}:{oneforall_port}"
     subfinder_addr = f":{subfinder_port}"
 
     if args.persist_env:
@@ -395,52 +366,32 @@ def main() -> int:
         upsert_env_file(
             env_path,
             {
-                "ONEFORALL_API_URL": oneforall_url,
                 "SUBFINDER_API_ADDR": subfinder_addr,
             },
         )
-        log_setup(f"updated {env_path} with ONEFORALL_API_URL and SUBFINDER_API_ADDR")
+        log_setup(f"updated {env_path} with SUBFINDER_API_ADDR")
     else:
         log_setup("runtime-only env mode enabled (subfinder-api/.env not modified)")
 
     common_env = os.environ.copy()
-    oneforall_python = resolve_python_executable(
-        "OneForAll API", ONEFORALL_DIR, args.oneforall_python, args.python_cmd
-    )
-    pyssl_python = resolve_python_executable("PySSL API", PYSSL_DIR, args.pyssl_python, args.python_cmd)
     nmap_python = resolve_python_executable("Nmap API", NMAP_DIR, args.nmap_python, args.python_cmd)
     openssl_python = resolve_python_executable("OpenSSL API", OPENSSL_DIR, args.openssl_python, args.python_cmd)
     fallback_python = shutil.which(args.python_cmd) or ""
 
-    pyssl_python = ensure_python_service_ready(
-        "PySSL API",
-        pyssl_python,
-        PYSSL_DIR,
-        alternates=[nmap_python, fallback_python],
-    )
     nmap_python = ensure_python_service_ready(
         "Nmap API",
         nmap_python,
         NMAP_DIR,
-        alternates=[pyssl_python, fallback_python],
+        alternates=[fallback_python],
     )
     openssl_python = ensure_python_service_ready(
         "OpenSSL API",
         openssl_python,
         OPENSSL_DIR,
-        alternates=[nmap_python, pyssl_python, fallback_python],
-    )
-
-    oneforall = ManagedProcess(
-        name="oneforall",
-        tag_color=COLOR_MAGENTA,
-        command=[oneforall_python, "run_api.py", "--port", str(oneforall_port)],
-        cwd=ONEFORALL_DIR,
-        env=common_env,
+        alternates=[nmap_python, fallback_python],
     )
 
     subfinder_env = common_env.copy()
-    subfinder_env["ONEFORALL_API_URL"] = oneforall_url
     subfinder_env["SUBFINDER_API_ADDR"] = subfinder_addr
 
     subfinder = ManagedProcess(
@@ -449,14 +400,6 @@ def main() -> int:
         command=[args.go_cmd, "run", "."],
         cwd=SUBFINDER_DIR,
         env=subfinder_env,
-    )
-
-    pyssl = ManagedProcess(
-        name="pyssl",
-        tag_color=COLOR_BLUE,
-        command=[pyssl_python, "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", str(pyssl_port)],
-        cwd=PYSSL_DIR,
-        env=common_env,
     )
 
     nmap = ManagedProcess(
@@ -475,12 +418,10 @@ def main() -> int:
         env=common_env,
     )
 
-    services = [oneforall, subfinder, pyssl, nmap, openssl]
+    services = [subfinder, nmap, openssl]
 
     log_info(color("Monorepo services starting", COLOR_BOLD))
-    log_info(f"OneForAll URL: {oneforall_url}")
     log_info(f"Subfinder URL: http://{args.host}:{subfinder_port}")
-    log_info(f"PySSL URL: http://{args.host}:{pyssl_port}")
     log_info(f"Nmap URL: http://{args.host}:{nmap_port}")
     log_info(f"OpenSSL URL: http://{args.host}:{openssl_port}")
 

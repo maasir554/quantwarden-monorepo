@@ -17,10 +17,6 @@ class ServiceConfig(BaseModel):
 
 
 SERVICES: Dict[str, ServiceConfig] = {
-    "oneforall": ServiceConfig(
-        name="oneforall",
-        base_url=os.getenv("ONEFORALL_API_URL", "http://127.0.0.1:8002"),
-    ),
     "subfinder": ServiceConfig(
         name="subfinder",
         base_url=os.getenv("SUBFINDER_API_URL", "http://127.0.0.1:8085"),
@@ -215,7 +211,7 @@ def assetfinder_only(domain: str, timeout_seconds: float = 90.0) -> Dict[str, An
 
 @mcp.tool()
 def monorepo_api_request(
-    service: Literal["oneforall", "subfinder", "pyssl", "nmap", "openssl"],
+    service: Literal["subfinder", "pyssl", "nmap", "openssl"],
     method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"],
     path: str,
     body: Dict[str, Any] | None = None,

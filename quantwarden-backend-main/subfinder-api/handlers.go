@@ -28,15 +28,13 @@ type discoverResponse struct {
 	Count         int      `json:"count"`
 	Subdomains    []string `json:"subdomains"`
 	Sources       sources  `json:"sources,omitempty"`
-	Info          string   `json:"info,omitempty"`
 	Message       string   `json:"message,omitempty"`
 	TimedOutTools []string `json:"timed_out_tools,omitempty"`
 }
 
 type sources struct {
-	Subfinder int `json:"subfinder"`
-	Assent    int `json:"assent"`
-	OneForAll int `json:"oneforall"`
+	Subfinder   int `json:"subfinder"`
+	Assetfinder int `json:"assetfinder"`
 }
 
 type errorResponse struct {
@@ -79,7 +77,6 @@ func subdomainsHandler(w http.ResponseWriter, r *http.Request) {
 		Count:         len(res.Subdomains),
 		Subdomains:    res.Subdomains,
 		Sources:       res.Sources,
-		Info:          res.Info,
 		Message:       res.Message,
 		TimedOutTools: res.TimedOutTools,
 	})
@@ -161,7 +158,6 @@ type combinedResult struct {
 	Subdomains    []string
 	TimedOutTools []string
 	Sources       sources
-	Info          string
 	Message       string
 	AllFailed     bool
 }
@@ -182,7 +178,6 @@ func runCombinedDiscovery(parent context.Context, domain string) combinedResult 
 	}{
 		{name: "subfinder", run: runSubfinder},
 		{name: "assetfinder", run: runAssetfinder},
-		{name: "oneforall", run: runOneForAll},
 	}
 
 	resultsCh := make(chan toolResult, len(runners))
@@ -208,16 +203,9 @@ func runCombinedDiscovery(parent context.Context, domain string) combinedResult 
 	errs := make([]string, 0)
 	successes := 0
 	src := sources{}
-	info := ""
-
 	for res := range resultsCh {
 		if res.Err != nil {
 			logWarn("discovery source=%s domain=%s status=error err=%v", res.Name, domain, res.Err)
-
-			if res.Name == "oneforall" && errors.Is(res.Err, errOneForAllNotConnected) {
-				info = "one-for-all api not connected"
-				continue
-			}
 
 			if errors.Is(res.Err, context.DeadlineExceeded) || (errors.Is(res.Err, context.Canceled) && errors.Is(ctx.Err(), context.DeadlineExceeded)) {
 				timedOutTools = append(timedOutTools, res.Name)
@@ -235,9 +223,7 @@ func runCombinedDiscovery(parent context.Context, domain string) combinedResult 
 		case "subfinder":
 			src.Subfinder = len(res.Subdomains)
 		case "assetfinder":
-			src.Assent = len(res.Subdomains)
-		case "oneforall":
-			src.OneForAll = len(res.Subdomains)
+			src.Assetfinder = len(res.Subdomains)
 		}
 
 		for _, sub := range res.Subdomains {
@@ -257,21 +243,18 @@ func runCombinedDiscovery(parent context.Context, domain string) combinedResult 
 		msg = strings.Join(errs, "; ")
 	}
 	logInfo(
-		"discovery domain=%s status=complete total=%d sources=subfinder:%d assent:%d oneforall:%d timed_out=%v info=%q",
+		"discovery domain=%s status=complete total=%d sources=subfinder:%d assetfinder:%d timed_out=%v",
 		domain,
 		len(list),
 		src.Subfinder,
-		src.Assent,
-		src.OneForAll,
+		src.Assetfinder,
 		timedOutTools,
-		info,
 	)
 
 	return combinedResult{
 		Subdomains:    list,
 		TimedOutTools: timedOutTools,
 		Sources:       src,
-		Info:          info,
 		Message:       msg,
 		AllFailed:     successes == 0,
 	}

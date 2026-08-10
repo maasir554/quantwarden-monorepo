@@ -6,9 +6,6 @@ services:
     container_name: quantwarden-subfinder-api
     environment:
       SUBFINDER_API_ADDR: ":8085"
-      ONEFORALL_API_URL: "http://oneforall-api:8002"
-    depends_on:
-      - oneforall-api
     ports:
       - "${SUBFINDER_PORT:-8085}:8085"
     restart: unless-stopped
@@ -18,6 +15,7 @@ services:
       context: ./pyssl-api
       dockerfile: Dockerfile
     container_name: quantwarden-pyssl-api
+    profiles: ["developer-tools"]
     ports:
       - "${PYSSL_PORT:-8000}:8000"
     restart: unless-stopped
@@ -45,8 +43,8 @@ services:
       context: ./mcp-monorepo-server
       dockerfile: Dockerfile
     container_name: quantwarden-mcp-server
+    profiles: ["developer-tools"]
     environment:
-      ONEFORALL_API_URL: "http://oneforall-api:8002"
       SUBFINDER_API_URL: "http://subfinder-api:8085"
       PYSSL_API_URL: "http://pyssl-api:8000"
       NMAP_API_URL: "http://nmap-api:8010"
@@ -58,13 +56,4 @@ services:
       - openssl-api
     stdin_open: true
     tty: true
-    restart: unless-stopped
-
-  oneforall-api:
-    build:
-      context: ./one-for-all-subdomains
-      dockerfile: Dockerfile.api
-    container_name: quantwarden-oneforall-api
-    ports:
-      - "${ONEFORALL_PORT:-8002}:8002"
     restart: unless-stopped

@@ -13,17 +13,7 @@ Why this command: the server is split across multiple files in the same package,
 
 ## Environment variables
 
-The API supports loading variables from a local `.env` file using `godotenv`.
-
-Supported keys:
-
-- `ONEFORALL_API_URL`: optional base URL for the external OneForAll-like API (example: `http://localhost:8002`).
-
-Example `.env`:
-
-```env
-ONEFORALL_API_URL=http://localhost:8002
-```
+Set `SUBFINDER_API_ADDR` to change the listen address. The default is `:8085`.
 
 ## Check
 
@@ -39,13 +29,9 @@ Expected response:
 
 ## Discover subdomains (combined)
 
-POST to `/subdomains` with a JSON body containing the root domain. This route runs subfinder + assetfinder in parallel and also tries an optional OneForAll endpoint (`ONEFORALL_API_URL/subdomains`), merges/deduplicates output, and returns a unified list.
+POST to `/subdomains` with a JSON body containing the root domain. This route runs Subfinder and the built-in Assetfinder source in parallel, merges their output, and returns a deduplicated list.
 
 If a tool times out (60s cap) or fails, the route falls back to partial results and includes a clear `message` and `timed_out_tools` list.
-
-If OneForAll is not configured or not reachable, the route skips it and returns:
-
-- `info: "one-for-all api not connected"`
 
 ```bash
 curl -i -X POST http://localhost:8085/subdomains \
@@ -65,10 +51,8 @@ Example response:
 	],
 	"sources": {
 		"subfinder": 1,
-		"assent": 1,
-		"oneforall": 0
+		"assetfinder": 1
 	},
-	"info": "one-for-all api not connected",
 	"message": "assetfinder timed out",
 	"timed_out_tools": ["assetfinder"]
 }

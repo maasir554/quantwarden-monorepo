@@ -19,12 +19,10 @@ func main() {
 		logSetup("env_file=loaded")
 	}
 	loadRuntimeConfig()
-	logSetup("oneforall_enabled=%t oneforall_url=%q", oneForAllBaseURL != "", oneForAllBaseURL)
 	logSetup(
-		"timeouts subfinder=%s assetfinder=%s oneforall=%s combined=%s",
+		"timeouts subfinder=%s assetfinder=%s combined=%s",
 		subfinderTimeout,
 		assetfinderTimeout,
-		oneForAllTimeout,
 		combinedTimeout,
 	)
 
