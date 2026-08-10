@@ -80,7 +80,7 @@ jobs:
         id: image_vars
         shell: bash
         run: |
-          echo "registry=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "registry=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
           echo "tag=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@v4
         with:
@@ -92,11 +92,16 @@ jobs:
         env:
           IMAGE_REGISTRY: ${{ steps.image_vars.outputs.registry }}
           IMAGE_TAG: ${{ steps.image_vars.outputs.tag }}
-        run: >-
-          docker compose
-          -f docker-compose.yml
-          -f docker-compose.production.yml
-          build --pull --push
+        run: |
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.production.yml \
+            build --pull
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.production.yml \
+            push db-init quantwarden-ui quantwarden-worker \
+              subfinder-api nmap-api openssl-api
 
   deploy:
     name: Deploy to Azure VM

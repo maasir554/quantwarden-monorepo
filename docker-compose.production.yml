@@ -2,19 +2,19 @@
 # The base compose file remains portable for local `docker compose up --build`.
 services:
   db-init:
-    image: ${IMAGE_REGISTRY}/db-init:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY}/quantwarden-db-init:${IMAGE_TAG:-latest}
 
   quantwarden-ui:
-    image: ${IMAGE_REGISTRY}/ui:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY}/quantwarden-ui:${IMAGE_TAG:-latest}
 
   quantwarden-worker:
-    image: ${IMAGE_REGISTRY}/worker:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY}/quantwarden-worker:${IMAGE_TAG:-latest}
 
   subfinder-api:
-    image: ${IMAGE_REGISTRY}/subfinder-api:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY}/quantwarden-subfinder-api:${IMAGE_TAG:-latest}
 
   nmap-api:
-    image: ${IMAGE_REGISTRY}/nmap-api:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY}/quantwarden-nmap-api:${IMAGE_TAG:-latest}
 
   openssl-api:
-    image: ${IMAGE_REGISTRY}/openssl-api:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY}/quantwarden-openssl-api:${IMAGE_TAG:-latest}
