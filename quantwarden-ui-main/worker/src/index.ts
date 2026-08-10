@@ -15,6 +15,7 @@ type LoopName = "executor" | "scheduler";
 
 const config = loadWorkerConfig();
 const runningJobs = new Map<string, Promise<void>>();
+const runningJobOrgIds = new Map<string, string>();
 const loopWakeWaiters: Record<LoopName, Set<() => void>> = {
   executor: new Set(),
   scheduler: new Set(),
@@ -184,6 +185,8 @@ async function handleHealthRequest(req: IncomingMessage, res: ServerResponse) {
       status: "alive",
       mode: isWorkerActive() ? "active" : "idle",
       runningJobs: runningJobs.size,
+      maxConcurrentJobs: config.maxConcurrentJobs,
+      maxConcurrentJobsPerOrg: config.maxConcurrentJobsPerOrg,
       timestamp: new Date().toISOString(),
     });
     return;
@@ -240,7 +243,9 @@ async function launchScanJob(orgId: string, claimed: ClaimedScanItem) {
 
   markWorkerActive("scan_claimed", orgId);
 
-  const job = (async () => {
+  runningJobOrgIds.set(claimed.scanId, orgId);
+
+  const job = Promise.resolve().then(async () => {
     try {
       logger.info("Executing scan item.", {
         orgId,
@@ -302,6 +307,7 @@ async function launchScanJob(orgId: string, claimed: ClaimedScanItem) {
       }
     } finally {
       runningJobs.delete(claimed.scanId);
+      runningJobOrgIds.delete(claimed.scanId);
       refreshActiveWindow(orgId);
 
       // Advance any automated scan workflows for this org now that a batch step finished
@@ -319,9 +325,17 @@ async function launchScanJob(orgId: string, claimed: ClaimedScanItem) {
         markWorkerActive("scan_job_still_running");
       }
     }
-  })();
+  });
 
   runningJobs.set(claimed.scanId, job);
+}
+
+function runningJobsForOrg(orgId: string) {
+  let count = 0;
+  for (const runningOrgId of runningJobOrgIds.values()) {
+    if (runningOrgId === orgId) count += 1;
+  }
+  return count;
 }
 
 function orderedOrgQueue(orgIds: string[]) {
@@ -405,7 +419,15 @@ async function runExecutorTick() {
   }
 
   for (const orgId of orderedOrgIds) {
-    while (!shuttingDown) {
+    if (runningJobs.size >= config.maxConcurrentJobs) {
+      break;
+    }
+
+    while (
+      !shuttingDown &&
+      runningJobs.size < config.maxConcurrentJobs &&
+      runningJobsForOrg(orgId) < config.maxConcurrentJobsPerOrg
+    ) {
       const claimed = await claimNextPendingScan(orgId);
       if (!claimed) {
         break;
@@ -533,6 +555,8 @@ async function main() {
     idleSchedulerTickMs: config.idleSchedulerTickMs,
     activeGraceMs: config.activeGraceMs,
     activeOrgQueryLimit: config.activeOrgQueryLimit,
+    maxConcurrentJobs: config.maxConcurrentJobs,
+    maxConcurrentJobsPerOrg: config.maxConcurrentJobsPerOrg,
     controlPort: config.controlPort,
     healthPort: config.healthPort,
     wakeEndpointEnabled: Boolean(config.wakeSecret.trim()),

@@ -67,6 +67,8 @@ SCAN_WORKER_IDLE_EXECUTOR_TICK_MS=1800000
 SCAN_WORKER_IDLE_SCHEDULER_TICK_MS=1800000
 SCAN_WORKER_ACTIVE_GRACE_MS=60000
 SCAN_WORKER_ACTIVE_ORG_LIMIT=100
+SCAN_WORKER_MAX_CONCURRENT_JOBS=6
+SCAN_WORKER_MAX_CONCURRENT_JOBS_PER_ORG=2
 ```
 
 Meaning:
@@ -86,6 +88,10 @@ Meaning:
   - fast polling while active
 - `SCAN_WORKER_IDLE_*`
   - slow polling while idle
+- `SCAN_WORKER_MAX_CONCURRENT_JOBS`
+  - global cap for concurrently executing scan items
+- `SCAN_WORKER_MAX_CONCURRENT_JOBS_PER_ORG`
+  - fairness cap for one organization
 
 ## App-side Environment
 
@@ -203,6 +209,8 @@ Expected health response:
   "status": "alive",
   "mode": "idle",
   "runningJobs": 0,
+  "maxConcurrentJobs": 6,
+  "maxConcurrentJobsPerOrg": 2,
   "timestamp": "..."
 }
 ```

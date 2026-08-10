@@ -15,6 +15,8 @@ export interface WorkerConfig {
   idleSchedulerTickMs: number;
   activeGraceMs: number;
   activeOrgQueryLimit: number;
+  maxConcurrentJobs: number;
+  maxConcurrentJobsPerOrg: number;
   controlPort: number;
   healthPort: number;
   wakeSecret: string;
@@ -29,6 +31,8 @@ export function loadWorkerConfig(): WorkerConfig {
     idleSchedulerTickMs: parseIntEnv("SCAN_WORKER_IDLE_SCHEDULER_TICK_MS", 1800000, { min: 5000, max: 3600000 }),
     activeGraceMs: parseIntEnv("SCAN_WORKER_ACTIVE_GRACE_MS", 60000, { min: 1000, max: 900000 }),
     activeOrgQueryLimit: parseIntEnv("SCAN_WORKER_ACTIVE_ORG_LIMIT", 100, { min: 1, max: 1000 }),
+    maxConcurrentJobs: parseIntEnv("SCAN_WORKER_MAX_CONCURRENT_JOBS", 6, { min: 1, max: 100 }),
+    maxConcurrentJobsPerOrg: parseIntEnv("SCAN_WORKER_MAX_CONCURRENT_JOBS_PER_ORG", 2, { min: 1, max: 20 }),
     controlPort: parseIntEnv("SCAN_WORKER_PORT", 8088, { min: 1, max: 65535 }),
     healthPort: parseIntEnv("SCAN_WORKER_HEALTH_PORT", 8089, { min: 1, max: 65535 }),
     wakeSecret: process.env.SCAN_WORKER_WAKE_SECRET || "",
