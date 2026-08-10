@@ -70,6 +70,18 @@ export type CbomResponse = {
   keys: CbomKeyRow[];
   protocols: CbomProtocolRow[];
   certificates: CbomCertificateRow[];
+  assets: CbomAssetDetail[];
+};
+
+export type CbomAssetDetail = {
+  assetId: string;
+  assetName: string;
+  assetType: string;
+  endpoints: Array<{ port: number; protocol: string }>;
+  algorithms: CbomAlgorithmRow[];
+  keys: CbomKeyRow[];
+  protocols: CbomProtocolRow[];
+  certificates: CbomCertificateRow[];
 };
 
 export type CbomScanSource = {
@@ -498,7 +510,24 @@ function buildCertificateRows(scans: CbomScanSource[]) {
   });
 }
 
+function buildCbomInventory(scans: CbomScanSource[]) {
+  return {
+    algorithms: buildAlgorithmRows(scans),
+    keys: buildKeyRows(scans),
+    protocols: buildProtocolRows(scans),
+    certificates: buildCertificateRows(scans),
+  };
+}
+
 export function buildCbomResponse(scans: CbomScanSource[]): CbomResponse {
+  const inventory = buildCbomInventory(scans);
+  const scansByAsset = new Map<string, CbomScanSource[]>();
+  for (const scan of scans) {
+    const existing = scansByAsset.get(scan.assetId) || [];
+    existing.push(scan);
+    scansByAsset.set(scan.assetId, existing);
+  }
+
   return {
     generatedAt: new Date().toISOString(),
     notes: [
@@ -512,9 +541,25 @@ export function buildCbomResponse(scans: CbomScanSource[]): CbomResponse {
       protocols: ["oid"],
       certificates: ["certificateExtension"],
     },
-    algorithms: buildAlgorithmRows(scans),
-    keys: buildKeyRows(scans),
-    protocols: buildProtocolRows(scans),
-    certificates: buildCertificateRows(scans),
+    ...inventory,
+    assets: Array.from(scansByAsset.entries())
+      .map(([assetId, assetScans]) => ({
+        assetId,
+        assetName: assetScans[0]?.assetName || assetId,
+        assetType: assetScans[0]?.assetType || "unknown",
+        endpoints: Array.from(
+          new Map(
+            assetScans.map((scan) => {
+              const endpoint = {
+                port: scan.portNumber || 443,
+                protocol: (scan.portProtocol || "tcp").toLowerCase(),
+              };
+              return [`${endpoint.port}/${endpoint.protocol}`, endpoint];
+            })
+          ).values()
+        ).sort((left, right) => left.port - right.port || left.protocol.localeCompare(right.protocol)),
+        ...buildCbomInventory(assetScans),
+      }))
+      .sort((left, right) => left.assetName.localeCompare(right.assetName)),
   };
 }

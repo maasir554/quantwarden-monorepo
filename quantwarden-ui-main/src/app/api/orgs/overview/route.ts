@@ -58,17 +58,6 @@ function getPortLabel(portNumber: number | null, portProtocol: string | null) {
   return `${portNumber || 443}/${(portProtocol || "tcp").toUpperCase()}`;
 }
 
-function getLatestSupportedTlsVersion(summary: NonNullable<ReturnType<typeof parseOpenSSLScanResult>["summary"]>) {
-  const discoveredTlsVersions = Array.from(
-    new Set([...(summary.supportedTlsVersions || []), ...(summary.primaryTlsVersion ? [summary.primaryTlsVersion] : [])])
-  );
-
-  return discoveredTlsVersions.sort((left, right) => {
-    const rankDelta = (TLS_VERSION_RANK[right] || 0) - (TLS_VERSION_RANK[left] || 0);
-    return rankDelta !== 0 ? rankDelta : left.localeCompare(right);
-  })[0] || null;
-}
-
 export async function GET(req: NextRequest) {
   try {
     const session = await auth.api.getSession({ headers: await headers() });
@@ -154,7 +143,12 @@ export async function GET(req: NextRequest) {
       orgId
     );
 
-    const tlsVersions: Record<string, number> = {};
+    const tlsVersionPosture: Record<string, number> = {
+      "TLS 1.2 only": 0,
+      "TLS 1.2 + 1.3": 0,
+      "TLS 1.3 only": 0,
+      "Legacy / other": 0,
+    };
     const tls13CipherNegotiated: Record<string, number> = {};
     const tls13CipherAccepted: Record<string, number> = {};
     const tls12CipherNegotiated: Record<string, number> = {};
@@ -343,7 +337,22 @@ export async function GET(req: NextRequest) {
 
       reachableTlsEndpointCount += 1;
 
-      incrementCounter(tlsVersions, getLatestSupportedTlsVersion(summary));
+      const supportedVersions = new Set(
+        summary.supportedTlsVersions.map((version) => version.replace(/^TLSv/i, "TLS "))
+      );
+      const hasTls13 = supportedVersions.has("TLS 1.3");
+      const hasTls12 = supportedVersions.has("TLS 1.2");
+      const hasDeprecatedTls = supportedVersions.has("TLS 1.0") || supportedVersions.has("TLS 1.1");
+
+      if (hasTls13 && !hasTls12 && !hasDeprecatedTls) {
+        tlsVersionPosture["TLS 1.3 only"] += 1;
+      } else if (hasTls13 && hasTls12) {
+        tlsVersionPosture["TLS 1.2 + 1.3"] += 1;
+      } else if (hasTls12 && !hasDeprecatedTls) {
+        tlsVersionPosture["TLS 1.2 only"] += 1;
+      } else {
+        tlsVersionPosture["Legacy / other"] += 1;
+      }
       incrementCounter(certificateSignatureAlgorithms, summary.signatureAlgorithm);
       incrementCounter(certificatePorts, `${row.portNumber || 443}`);
 
@@ -458,12 +467,9 @@ export async function GET(req: NextRequest) {
       portsScored: pqcPortsScored,
     };
 
-    const tlsChartData = Object.entries(tlsVersions)
-      .map(([name, value]) => ({ name, value }))
-      .sort((left, right) => {
-        const rankDelta = (TLS_VERSION_RANK[right.name] || 0) - (TLS_VERSION_RANK[left.name] || 0);
-        return rankDelta !== 0 ? rankDelta : right.value - left.value;
-      });
+    const tlsChartData = ["TLS 1.2 only", "TLS 1.2 + 1.3", "TLS 1.3 only", "Legacy / other"]
+      .map((name) => ({ name, value: tlsVersionPosture[name] || 0 }))
+      .filter((entry) => entry.value > 0 || entry.name !== "Legacy / other");
 
     const topCertificatesByIdentity = Array.from(certificateIdentities.values())
       .map((aggregate) => ({

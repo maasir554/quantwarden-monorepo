@@ -1494,7 +1494,7 @@ export default function AssetIntelligenceClient({
                   {activeRecommendation === 'protocol' && (
                     <p className="text-[15px] text-gray-700 leading-relaxed font-medium">
                       <strong className="text-gray-900 font-bold block mb-2 text-base">Enforce Modern Protocols</strong>
-                      Force <strong>TLS 1.3</strong> as the default and minimum protocol version. Post-Quantum algorithms integrate most effectively into the TLS 1.3 handshake mechanism. Only permit TLS 1.2 if strict backward compatibility for legacy clients is absolutely required, and explicitly disable TLS 1.0 and TLS 1.1 across all environments.
+                      For the best protocol score, make <strong>TLS 1.3 the only enabled version</strong>. Supporting both TLS 1.2 and TLS 1.3 receives 5 points for compatibility, while TLS 1.2 alone receives no protocol points. Explicitly disable TLS 1.0 and TLS 1.1 across all environments because deprecated versions also trigger a hard penalty.
                     </p>
                   )}
                   {activeRecommendation === 'auth' && (

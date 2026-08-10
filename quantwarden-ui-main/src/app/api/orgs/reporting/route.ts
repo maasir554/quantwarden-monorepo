@@ -6,6 +6,7 @@ import { parseOpenSSLScanResult } from "@/lib/openssl-scan";
 import { calculatePqcScore } from "@/lib/pqc-scoring";
 import { hasKyberGroup } from "@/lib/pqc";
 import {
+  DEFAULT_REPORT_SECTIONS,
   getTierFromScore,
   getTierLabel,
   getTierStatus,
@@ -14,8 +15,11 @@ import {
   REPORT_TIER_ORDER,
   type ReportAssetEntry,
   type ReportImmediateAttentionAsset,
+  type ReportSuggestedChange,
   type ReportTier,
+  type ReportSectionKey,
 } from "@/lib/reporting";
+import { generateLatexPdf } from "@/lib/reporting-latex";
 
 type ReportingScanRow = {
   assetId: string;
@@ -34,40 +38,15 @@ const TLS_VERSION_RANK: Record<string, number> = {
   "TLSv1.0": 1,
 };
 
-function incrementCounter(counter: Record<string, number>, key: string | null | undefined) {
-  if (!key) return;
-  counter[key] = (counter[key] || 0) + 1;
-}
-
-function sortByCountDescending(counter: Record<string, number>) {
-  return Object.entries(counter)
-    .map(([name, value]) => ({ name, value }))
-    .sort((left, right) => {
-      const valueDelta = right.value - left.value;
-      return valueDelta !== 0 ? valueDelta : left.name.localeCompare(right.name);
-    });
-}
-
 function uniqueStrings(values: Array<string | null | undefined> | null | undefined) {
   return Array.from(new Set((values || []).filter((value): value is string => Boolean(value && value.trim()))));
-}
-
-function getLatestSupportedTlsVersion(summary: NonNullable<ReturnType<typeof parseOpenSSLScanResult>["summary"]>) {
-  const discoveredTlsVersions = Array.from(
-    new Set([...(summary.supportedTlsVersions || []), ...(summary.primaryTlsVersion ? [summary.primaryTlsVersion] : [])])
-  );
-
-  return (
-    discoveredTlsVersions.sort((left, right) => {
-      const rankDelta = (TLS_VERSION_RANK[right] || 0) - (TLS_VERSION_RANK[left] || 0);
-      return rankDelta !== 0 ? rankDelta : left.localeCompare(right);
-    })[0] || null
-  );
 }
 
 function getPortLabel(portNumber: number | null, portProtocol: string | null) {
   return `${portNumber || 443}/${(portProtocol || "tcp").toUpperCase()}`;
 }
+
+const EXPECTED_TLS_PORTS = new Set([443, 465, 587, 636, 853, 989, 990, 992, 993, 995, 5061, 8443, 9443]);
 
 function pushAttention(
   buckets: Record<AttentionBucketKey, ReportImmediateAttentionAsset[]>,
@@ -150,12 +129,19 @@ export async function GET(req: NextRequest) {
       orgId
     );
 
-    const tlsVersions: Record<string, number> = {};
+    const tlsVersionPosture: Record<string, number> = {
+      "TLS 1.2 only": 0,
+      "TLS 1.2 + 1.3": 0,
+      "TLS 1.3 only": 0,
+      "Danger: TLS 1.0 / 1.1 enabled": 0,
+      "Unclassified / other TLS": 0,
+    };
     const attentionBuckets: Record<AttentionBucketKey, ReportImmediateAttentionAsset[]> = {
       dns: [],
       certificate: [],
       tls: [],
     };
+    const suggestedChanges: ReportSuggestedChange[] = [];
 
     let reachableTlsEndpointCount = 0;
     let strongCipherCount = 0;
@@ -186,10 +172,106 @@ export async function GET(req: NextRequest) {
       const assessment = parsed.raw ? calculatePqcScore(parsed.raw) : null;
       const portLabel = getPortLabel(row.portNumber, row.portProtocol);
 
-      if (summary) {
-        const latestTlsVersion = getLatestSupportedTlsVersion(summary);
-        incrementCounter(tlsVersions, latestTlsVersion);
+      const findings: Array<{ label: string; value: string }> = [];
+      const suggestions: string[] = [];
+      const effectivePort = row.portNumber || 443;
 
+      if (summary) {
+        const supportedVersions = uniqueStrings([
+          ...(summary.supportedTlsVersions || []),
+          summary.primaryTlsVersion,
+        ]);
+        const hasTls13 = supportedVersions.some((version) => version.includes("1.3"));
+        const hasTls12 = supportedVersions.some((version) => version.includes("1.2"));
+        const hasDeprecatedTls = supportedVersions.some(
+          (version) => version.includes("1.0") || version.includes("1.1")
+        );
+
+        findings.push({
+          label: "TLS",
+          value: summary.noTlsDetected
+            ? "Not detected"
+            : supportedVersions.length
+              ? supportedVersions.map((version) => version.replace(/^TLSv/i, "TLS ")).join(", ")
+              : "Version unknown",
+        });
+
+        if (summary.dnsMissing) {
+          suggestions.push("Restore or correct the DNS record before rescanning the endpoint.");
+        }
+        if (summary.noTlsDetected) {
+          if (EXPECTED_TLS_PORTS.has(effectivePort)) {
+            suggestions.push("Enable TLS 1.2 and TLS 1.3 as the migration baseline.");
+          } else if ([80, 3000, 8000, 8080, 8888].includes(effectivePort)) {
+            suggestions.push("Redirect cleartext HTTP to a TLS-enabled HTTPS endpoint; do not treat this port as a TLS endpoint.");
+          } else {
+            suggestions.push("Confirm the service type. If it is intentionally non-TLS, exclude this port from TLS/PQC scoring; otherwise enable TLS.");
+          }
+        } else {
+          if (hasDeprecatedTls) {
+            suggestions.push("Disable TLS 1.0 and TLS 1.1. Retain TLS 1.2 and TLS 1.3 during migration.");
+          }
+          if (!hasTls13) {
+            suggestions.push("Enable TLS 1.3; retain TLS 1.2 only where compatibility requires it.");
+          } else if (hasTls12 && !hasDeprecatedTls) {
+            suggestions.push("Move to TLS 1.3 only where compatibility permits to earn the full protocol score.");
+          }
+        }
+
+        if (summary.strongCipher === false && !assessment) {
+          suggestions.push("Replace weak cipher suites with AES-256-GCM or ChaCha20-Poly1305.");
+        }
+        if (typeof summary.daysRemaining === "number" && summary.daysRemaining < 0) {
+          findings.push({ label: "Certificate", value: "Expired" });
+          suggestions.push("Renew and deploy a currently valid certificate.");
+        } else if (summary.certificateValid === false) {
+          findings.push({ label: "Certificate", value: "Invalid validity window" });
+          suggestions.push("Replace the certificate with one whose validity window covers the deployment.");
+        } else if (summary.certificateValid === true) {
+          findings.push({ label: "Certificate", value: "Valid" });
+        }
+        if (summary.selfSignedCert === true) {
+          findings.push({ label: "Trust", value: "Self-signed certificate" });
+          suggestions.push("Replace the self-signed certificate with a certificate issued by a trusted CA.");
+        }
+      } else {
+        findings.push({ label: "Scan", value: "No structured TLS evidence" });
+        suggestions.push("Run a successful TLS scan and review the endpoint configuration.");
+      }
+
+      if (assessment && summary && !summary.noTlsDetected) {
+        findings.push(
+          { label: "Key exchange", value: assessment.breakdown.keyExchange.label },
+          { label: "Cipher", value: assessment.breakdown.symmetric.label },
+          { label: "Authentication", value: assessment.breakdown.auth.label },
+          { label: "Endpoint score", value: `${assessment.score}/100 (Tier ${assessment.tier})` }
+        );
+        if (assessment.breakdown.keyExchange.score < 40) {
+          suggestions.push(
+            assessment.breakdown.keyExchange.score === 20
+              ? "Prefer the ML-KEM hybrid group so it is negotiated by default."
+              : "Add ML-KEM hybrid support and make it the preferred key-exchange group."
+          );
+        }
+        if (assessment.breakdown.symmetric.score < 30) {
+          suggestions.push("Prefer AES-256-GCM or ChaCha20-Poly1305.");
+        }
+        if (assessment.breakdown.auth.score < 10) {
+          suggestions.push("Use ECDSA/EdDSA or RSA with at least 3072 bits.");
+        }
+      }
+
+      suggestedChanges.push({
+        assetId: row.assetId,
+        assetName: row.assetName,
+        port: portLabel,
+        findings,
+        actions: Array.from(new Set(suggestions)).length
+          ? Array.from(new Set(suggestions))
+          : ["No immediate configuration change is indicated; continue monitoring."],
+      });
+
+      if (summary) {
         if (!summary.dnsMissing && !summary.noTlsDetected) {
           reachableTlsEndpointCount += 1;
         }
@@ -209,12 +291,29 @@ export async function GET(req: NextRequest) {
           validCerts += 1;
         }
 
-        const supportedTlsVersions = uniqueStrings(summary.supportedTlsVersions);
+        const supportedTlsVersions = uniqueStrings([
+          ...(summary.supportedTlsVersions || []),
+          summary.primaryTlsVersion,
+        ]);
+        const hasTls13 = supportedTlsVersions.some((version) => version.includes("1.3"));
+        const hasTls12 = supportedTlsVersions.some((version) => version.includes("1.2"));
+        const hasDeprecatedTls = supportedTlsVersions.some(
+          (version) => version.includes("1.0") || version.includes("1.1")
+        );
+
+        if (!summary.dnsMissing && !summary.noTlsDetected) {
+          if (hasDeprecatedTls) tlsVersionPosture["Danger: TLS 1.0 / 1.1 enabled"] += 1;
+          else if (hasTls13 && !hasTls12) tlsVersionPosture["TLS 1.3 only"] += 1;
+          else if (hasTls13 && hasTls12) tlsVersionPosture["TLS 1.2 + 1.3"] += 1;
+          else if (hasTls12) tlsVersionPosture["TLS 1.2 only"] += 1;
+          else tlsVersionPosture["Unclassified / other TLS"] += 1;
+        }
+
         const maxTlsRank = Math.max(
           TLS_VERSION_RANK[summary.primaryTlsVersion || ""] || 0,
           ...supportedTlsVersions.map((version) => TLS_VERSION_RANK[version] || 0)
         );
-        if (maxTlsRank > 0 && maxTlsRank < TLS_VERSION_RANK["TLSv1.3"]) {
+        if (hasDeprecatedTls || (maxTlsRank > 0 && !hasTls13)) {
           tlsDowngradeVulnerable += 1;
         }
 
@@ -255,7 +354,7 @@ export async function GET(req: NextRequest) {
             name: row.assetName,
             issue: `No TLS detected on ${portLabel}`,
           });
-        } else if (maxTlsRank > 0 && maxTlsRank < TLS_VERSION_RANK["TLSv1.3"]) {
+        } else if (hasDeprecatedTls || (maxTlsRank > 0 && !hasTls13)) {
           const strongestVersion =
             supportedTlsVersions
               .slice()
@@ -265,7 +364,9 @@ export async function GET(req: NextRequest) {
           pushAttention(attentionBuckets, "tls", {
             id: row.assetId,
             name: row.assetName,
-            issue: `No TLS 1.3 support, max ${strongestVersion} on ${portLabel}`,
+            issue: hasDeprecatedTls
+              ? `TLS 1.0 / 1.1 enabled on ${portLabel}`
+              : `No TLS 1.3 support, max ${strongestVersion} on ${portLabel}`,
           });
         }
       }
@@ -410,7 +511,13 @@ export async function GET(req: NextRequest) {
             tone: "red",
           },
         ],
-        tlsVersionMix: sortByCountDescending(tlsVersions),
+        tlsVersionMix: [
+          "TLS 1.2 only",
+          "TLS 1.2 + 1.3",
+          "TLS 1.3 only",
+          "Danger: TLS 1.0 / 1.1 enabled",
+          ...(tlsVersionPosture["Unclassified / other TLS"] > 0 ? ["Unclassified / other TLS"] : []),
+        ].map((name) => ({ name, value: tlsVersionPosture[name] || 0 })),
         certificateHealth: [
           { label: "Valid", value: validCerts, tone: "emerald" },
           { label: "Expiring soon", value: closeDeadlineCerts, tone: "amber" },
@@ -475,6 +582,7 @@ export async function GET(req: NextRequest) {
           assets: attentionBuckets.tls.slice(0, 8),
         },
       ],
+      suggestedChanges,
       assets,
     };
 
@@ -482,5 +590,64 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error("Reporting payload fetch error:", error);
     return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => null);
+    const orgId = typeof body?.orgId === "string" ? body.orgId : "";
+    if (!orgId) {
+      return NextResponse.json({ error: "Missing orgId" }, { status: 400 });
+    }
+
+    const heading = typeof body.heading === "string" ? body.heading.trim().slice(0, 140) : "";
+    const subtitle = typeof body.subtitle === "string" ? body.subtitle.trim().slice(0, 360) : "";
+    const sectionKeys = Object.keys(DEFAULT_REPORT_SECTIONS) as ReportSectionKey[];
+    const sections = sectionKeys.reduce<Record<ReportSectionKey, boolean>>(
+      (result, key) => {
+        result[key] = typeof body.sections?.[key] === "boolean" ? body.sections[key] : DEFAULT_REPORT_SECTIONS[key];
+        return result;
+      },
+      { ...DEFAULT_REPORT_SECTIONS }
+    );
+
+    if (!Object.values(sections).some(Boolean)) {
+      return NextResponse.json({ error: "Select at least one report section." }, { status: 400 });
+    }
+
+    const reportUrl = new URL(req.url);
+    reportUrl.searchParams.set("orgId", orgId);
+    const dataResponse = await GET(new NextRequest(reportUrl, { headers: req.headers }));
+    if (!dataResponse.ok) return dataResponse;
+
+    const data = (await dataResponse.json()) as OrganizationReportPayload;
+    const pdf = await generateLatexPdf(data, {
+      heading: heading || `${data.organization.name} Security Posture Report`,
+      subtitle: subtitle || "TLS and post-quantum readiness assessment",
+      sections,
+    });
+    const datePart = data.generatedAt.slice(0, 10);
+    const slug = data.organization.slug.replace(/[^a-z0-9-]+/gi, "-").replace(/^-+|-+$/g, "") || "organization";
+
+    return new NextResponse(new Uint8Array(pdf), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${slug}-security-posture-${datePart}.pdf"`,
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  } catch (error: any) {
+    console.error("Server-side PDF generation failed:", error);
+    const missingLatex = error?.code === "ENOENT";
+    return NextResponse.json(
+      {
+        error: missingLatex
+          ? "The server PDF engine is unavailable. Install pdflatex or rebuild the Docker image."
+          : "The server could not generate the PDF report.",
+      },
+      { status: 500 }
+    );
   }
 }

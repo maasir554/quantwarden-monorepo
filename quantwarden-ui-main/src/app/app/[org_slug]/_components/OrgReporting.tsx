@@ -258,7 +258,7 @@ function ShellCard({
   return (
     <section
       className={cn(
-        "rounded-[28px] border border-white/40 bg-white/45 p-5 shadow-sm ring-1 ring-amber-500/10 backdrop-blur-xl",
+        "rounded-xl border border-white/45 bg-white/45 p-5 shadow-sm backdrop-blur-md",
         className
       )}
     >
@@ -267,20 +267,18 @@ function ShellCard({
   );
 }
 
-function InfoPill({ label, value, tone = "warm" }: { label: string; value: string; tone?: "warm" | "red" | "green" | "blue" }) {
-  const toneClass =
-    tone === "red"
-      ? "border-[#8B0000]/12 bg-[#8B0000]/8 text-[#8B0000]"
-      : tone === "green"
-        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-        : tone === "blue"
-          ? "border-blue-200 bg-blue-50 text-blue-700"
-          : "border-amber-500/15 bg-[#fff7e6] text-[#8a5d33]";
-
+function InfoPill({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+  tone?: "warm" | "red" | "green" | "blue";
+}) {
   return (
-    <div className={cn("rounded-full border px-4 py-2", toneClass)}>
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{label}</p>
-      <p className="mt-1 text-sm font-black">{value}</p>
+    <div className="rounded-lg border border-[#8a5d33]/12 bg-[#faf9f7] px-3 py-2">
+      <p className="text-xs font-medium text-[#6f5a48]">{label}</p>
+      <p className="mt-0.5 text-sm font-bold text-[#3d200a]">{value}</p>
     </div>
   );
 }
@@ -353,31 +351,17 @@ function TabButton({
       onClick={onClick}
       title={helper}
       aria-label={`${label}. ${helper}`}
+      role="tab"
+      aria-selected={active}
       className={cn(
-        "group relative z-10 min-w-[220px] flex-1 rounded-[26px] border p-4 text-left transition hover:z-30 focus-visible:z-30",
+        "relative -mb-px inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-t-xl border px-4 py-2.5 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8B0000]/20",
         active
-          ? "border-[#8B0000]/15 bg-[#8B0000] text-white shadow-sm"
-          : "border-[#8a5d33]/10 bg-white/70 text-[#3d200a] hover:bg-white"
+          ? "border-white/55 border-b-transparent bg-white/55 text-[#8B0000] shadow-[0_-1px_0_rgba(255,255,255,0.35)] backdrop-blur-md"
+          : "border-transparent bg-transparent text-[#6f5a48] hover:bg-white/55 hover:text-[#3d200a]"
       )}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className={cn("text-xs font-black uppercase tracking-[0.18em]", active ? "text-white/72" : "text-[#8a5d33]/70")}>
-            Reporting
-          </p>
-          <p className="mt-2 truncate text-lg font-black">{label}</p>
-        </div>
-        <span className={cn("inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl", active ? "bg-white/16" : "bg-[#8B0000]/8")}>
-          <Icon className={cn("h-5 w-5", active ? "text-white" : "text-[#8B0000]")} />
-        </span>
-      </div>
-      <span
-        className={cn(
-          "pointer-events-none absolute left-4 right-4 top-[calc(100%+0.6rem)] z-[80] rounded-2xl border border-[#5f1212] bg-[#6f1616] px-3 py-2 text-xs font-semibold leading-5 text-white opacity-0 shadow-[0_18px_40px_rgba(70,10,10,0.35)] transition group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:opacity-100"
-        )}
-      >
-        {helper}
-      </span>
+      <Icon className="h-4 w-4" />
+      <span>{label}</span>
     </button>
   );
 }
@@ -481,31 +465,28 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
   };
 
   return (
-    <div className="flex flex-col space-y-5 pb-10 animate-in fade-in duration-300">
-      <ShellCard>
+    <div className="flex flex-col space-y-4 pb-10 animate-in fade-in duration-300">
+      <header className="border-b border-[#8a5d33]/12 pb-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-[#8B0000]/10 text-[#8B0000]">
-                <FileCheck className="h-6 w-6" />
-              </span>
+            <div className="flex items-start gap-3">
+              <FileCheck className="mt-1 h-5 w-5 shrink-0 text-[#8B0000]" />
               <div>
-                <h1 className="text-2xl font-black tracking-tight text-[#3d200a]">Reporting</h1>
-                <p className="mt-1 text-sm font-semibold text-[#8a5d33]/75">
-                  Build stakeholder-friendly reports, set scan rhythms, and prepare delivery flows without leaving the organization workspace.
+                <h1 className="text-xl font-black tracking-tight text-[#3d200a]">Reporting</h1>
+                <p className="mt-1 max-w-2xl text-sm font-medium text-[#6f5a48]">
+                  Generate reports and manage scheduled scans and delivery.
                 </p>
               </div>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <InfoPill label="Org heading" value={org.name || "Organization"} />
-            <InfoPill label="Next recurring scan" value={nextPeriodicRun} tone={periodicEnabled ? "green" : "red"} />
-            <InfoPill label="Next email" value={nextEmailRun} tone="blue" />
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-[#6f5a48]">
+            <span>Next scan <strong className="ml-1 text-[#3d200a]">{nextPeriodicRun}</strong></span>
+            <span>Next email <strong className="ml-1 text-[#3d200a]">{nextEmailRun}</strong></span>
           </div>
         </div>
 
         {!canConfigure ? (
-          <div className="mt-5 rounded-3xl border border-amber-500/20 bg-[#fff7e6] p-4">
+          <div className="mt-4 rounded-xl border border-[#8a5d33]/15 bg-white/55 p-3.5">
             <div className="flex items-start gap-3">
               <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-[#8B0000]" />
               <div>
@@ -517,10 +498,11 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
             </div>
           </div>
         ) : null}
-      </ShellCard>
+      </header>
 
-      <ShellCard className="relative z-20 overflow-visible p-3">
-        <div className="flex flex-wrap gap-3">
+      <section className="overflow-hidden rounded-2xl border border-white/45 bg-white/20 shadow-sm backdrop-blur-xl">
+      <nav className="overflow-x-auto border-b border-white/45 bg-white/10 px-3 pt-2" aria-label="Reporting sections">
+        <div className="flex min-w-max gap-1" role="tablist">
           {reportingTabs.map((tab) => (
             <TabButton
               key={tab.key}
@@ -532,7 +514,9 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
             />
           ))}
         </div>
-      </ShellCard>
+      </nav>
+
+      <div className={cn(activeTab === "sharePdf" ? "" : "p-4")}>
 
       {activeTab === "sharePdf" ? (
         <ReportingPdfBuilder org={org} canConfigure={canConfigure} />
@@ -543,8 +527,7 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
           <ShellCard>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-black uppercase tracking-[0.18em] text-[#8a5d33]/70">Periodic Scans</p>
-                <h2 className="mt-2 text-xl font-black text-[#3d200a]">Keep technical coverage fresh without chasing the calendar</h2>
+                <h2 className="text-xl font-black text-[#3d200a]">Keep technical coverage fresh without chasing the calendar</h2>
                 <p className="mt-2 text-sm font-medium text-[#8a5d33]/75">
                   Pick a cadence, choose a softer time window, and decide how much of the port surface should be revisited automatically.
                 </p>
@@ -669,10 +652,10 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
           </ShellCard>
 
           <ShellCard className="h-fit">
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#8a5d33]/70">Schedule Summary</p>
+            <h3 className="text-sm font-bold text-[#3d200a]">Schedule summary</h3>
             <div className="mt-5 space-y-4">
               <div className="rounded-3xl border border-[#8B0000]/12 bg-[#fff7e6] p-4">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#8a5d33]/70">Status</p>
+                <p className="text-xs font-medium text-[#6f5a48]">Status</p>
                 <p className="mt-2 text-xl font-black text-[#3d200a]">{periodicEnabled ? "Enabled" : "Paused"}</p>
                 <p className="mt-1 text-sm font-medium text-[#8a5d33]">
                   {periodicEnabled
@@ -709,8 +692,7 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
       {activeTab === "scheduleScan" ? (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_360px]">
           <ShellCard>
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#8a5d33]/70">Schedule Scan</p>
-            <h2 className="mt-2 text-xl font-black text-[#3d200a]">Book a one-time future scan without touching the recurring schedule</h2>
+            <h2 className="text-xl font-black text-[#3d200a]">Book a one-time future scan without touching the recurring schedule</h2>
             <p className="mt-2 text-sm font-medium text-[#8a5d33]/75">
               This flow is intentionally calmer than the asset scanning screen so users can prepare a future run without feeling rushed.
             </p>
@@ -815,10 +797,10 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
           </ShellCard>
 
           <ShellCard className="h-fit">
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#8a5d33]/70">Upcoming Run</p>
+            <h3 className="text-sm font-bold text-[#3d200a]">Upcoming run</h3>
             <div className="mt-5 space-y-4">
               <div className="rounded-3xl border border-[#8B0000]/12 bg-[#fff7e6] p-4">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#8a5d33]/70">Scheduled for</p>
+                <p className="text-xs font-medium text-[#6f5a48]">Scheduled for</p>
                 <p className="mt-2 text-xl font-black text-[#3d200a]">{formatOneTimeRun(scheduledDate, scheduledTimeWindow)}</p>
               </div>
 
@@ -857,7 +839,7 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
           <ShellCard className="h-fit">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-black uppercase tracking-[0.18em] text-[#8a5d33]/70">Report types</p>
+                <h3 className="text-sm font-bold text-[#3d200a]">Report types</h3>
                 <h2 className="mt-2 text-xl font-black text-[#3d200a]">Reusable delivery templates</h2>
               </div>
               <button
@@ -916,8 +898,7 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
           </ShellCard>
 
           <ShellCard>
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#8a5d33]/70">Auto Emails</p>
-            <h2 className="mt-2 text-xl font-black text-[#3d200a]">Tune who receives what, and how often</h2>
+            <h2 className="text-xl font-black text-[#3d200a]">Tune who receives what, and how often</h2>
             <p className="mt-2 text-sm font-medium text-[#8a5d33]/75">
               Report types let teams separate leadership summaries from technical deep dives without rebuilding recipient lists each time.
             </p>
@@ -1025,11 +1006,11 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
           </ShellCard>
 
           <ShellCard className="h-fit">
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#8a5d33]/70">Delivery Summary</p>
+            <h3 className="text-sm font-bold text-[#3d200a]">Delivery summary</h3>
             {selectedReportType ? (
               <div className="mt-5 space-y-4">
                 <div className="rounded-3xl border border-[#8B0000]/12 bg-[#fff7e6] p-4">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-[#8a5d33]/70">Next email</p>
+                  <p className="text-xs font-medium text-[#6f5a48]">Next email</p>
                   <p className="mt-2 text-xl font-black text-[#3d200a]">
                     {formatMockNextRun(
                       selectedReportType.cadence === "daily"
@@ -1109,6 +1090,8 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
           </ShellCard>
         </div>
       ) : null}
+      </div>
+      </section>
     </div>
   );
 }

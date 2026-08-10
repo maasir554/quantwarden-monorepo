@@ -14,10 +14,17 @@ import {
 } from "lucide-react";
 
 import { CBOM_NOT_REPORTED, type CbomResponse } from "@/lib/cbom";
+import {
+  buildCycloneDxCbom,
+  buildPerAssetCbomExport,
+  buildSpdxInteropDocument,
+  CYCLONEDX_CBOM_SPEC_VERSION,
+  SPDX_INTEROP_SPEC_VERSION,
+} from "@/lib/cbom-export";
 import { cn } from "@/lib/utils";
 
 type CbomTabKey = "algorithms" | "keys" | "protocols" | "certificates";
-type ExportFormat = "json" | "csv";
+type ExportFormat = "cyclonedx" | "spdx" | "per-asset" | "csv";
 type CsvColumn<T> = {
   header: string;
   accessor: (row: T) => string | number | boolean | null | undefined;
@@ -238,15 +245,17 @@ function DataPanel({
               onChange={(event) => onExportFormatChange(event.target.value as ExportFormat)}
               className="rounded-full border border-[#8a5d33]/10 bg-[#fffdf8] px-3 py-1.5 text-sm font-bold text-[#3d200a] outline-none transition focus:border-[#8B0000]/30 focus:ring-2 focus:ring-[#8B0000]/10"
             >
-              <option value="json">JSON</option>
-              <option value="csv">CSV</option>
+              <option value="cyclonedx">CycloneDX 1.6 JSON</option>
+              <option value="spdx">SPDX 2.3 JSON</option>
+              <option value="per-asset">Per-asset details JSON</option>
+              <option value="csv">Current table CSV</option>
             </select>
             <button
               type="button"
               onClick={onExport}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#8B0000] text-white transition hover:bg-[#6f0000]"
-              aria-label={`Download ${exportFormat.toUpperCase()} export`}
-              title={`Download ${exportFormat.toUpperCase()}`}
+              aria-label="Download selected CBOM export"
+              title="Download selected export"
             >
               <Download className="h-4 w-4" />
             </button>
@@ -262,7 +271,7 @@ export default function OrgCbom({ org }: OrgCbomProps) {
   const [data, setData] = useState<CbomResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<CbomTabKey>("algorithms");
-  const [exportFormat, setExportFormat] = useState<ExportFormat>("json");
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("cyclonedx");
 
   useEffect(() => {
     let mounted = true;
@@ -565,8 +574,16 @@ export default function OrgCbom({ org }: OrgCbomProps) {
       downloadText(activeConfig.csvFilename, activeConfig.csvContent, "text/csv;charset=utf-8");
       return;
     }
-
-    downloadJson(activeConfig.jsonFilename, activeConfig.payload);
+    const uuid = crypto.randomUUID();
+    if (exportFormat === "spdx") {
+      downloadJson("quantwarden-cbom.spdx.json", buildSpdxInteropDocument(data, uuid));
+      return;
+    }
+    if (exportFormat === "per-asset") {
+      downloadJson("quantwarden-cbom-per-asset.json", buildPerAssetCbomExport(data));
+      return;
+    }
+    downloadJson("quantwarden-cbom.cdx.json", buildCycloneDxCbom(data, uuid));
   };
 
   return (
@@ -595,36 +612,33 @@ export default function OrgCbom({ org }: OrgCbomProps) {
         <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
           {tabs.map((item) => {
             const Icon = item.icon;
-            const selected = item.key === activeTab;
             return (
-              <button
+              <div
                 key={item.key}
-                type="button"
-                onClick={() => setActiveTab(item.key)}
-                className={cn(
-                  "rounded-2xl border px-4 py-3 text-left transition",
-                  selected
-                    ? "border-[#8B0000]/15 bg-[#8B0000] text-white shadow-sm"
-                    : "border-[#8a5d33]/10 bg-white/70 text-[#3d200a] hover:bg-white/90"
-                )}
+                className="rounded-2xl border border-[#8a5d33]/10 bg-white/70 px-4 py-3 text-[#3d200a]"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className={cn("text-xs font-bold tracking-[0.16em]", selected ? "text-white/80" : "text-[#8a5d33]/70")}>
+                  <span className="text-xs font-bold tracking-[0.16em] text-[#8a5d33]/70">
                     {item.label}
                   </span>
-                  <Icon className={cn("h-4 w-4", selected ? "text-white" : "text-[#8B0000]")} />
+                  <Icon className="h-4 w-4 text-[#8B0000]" />
                 </div>
                 <div className="mt-2 text-2xl font-black">{item.count}</div>
-              </button>
+              </div>
             );
           })}
         </div>
 
-        <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-50/80 p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#8B0000]" />
+        <details className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-50/80 p-4">
+          <summary className="flex cursor-pointer items-center gap-3 text-sm font-bold text-[#3d200a]">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-[#8B0000]" />
+            Data coverage and export standards
+          </summary>
+          <div className="mt-3 space-y-3 pl-8">
+            <p className="text-sm font-medium text-[#8a5d33]">
+              Native CBOM JSON uses CycloneDX {CYCLONEDX_CBOM_SPEC_VERSION}. The SPDX {SPDX_INTEROP_SPEC_VERSION} option is an interoperability view because SPDX does not define native cryptographic-asset classes. Per-asset export embeds one CycloneDX document for every asset.
+            </p>
             <div className="space-y-2">
-              <p className="text-sm font-bold text-[#3d200a]">Data coverage notes</p>
               <ul className="space-y-1 text-sm font-medium text-[#8a5d33]">
                 {data.notes.map((note) => (
                   <li key={note}>{note}</li>
@@ -632,7 +646,7 @@ export default function OrgCbom({ org }: OrgCbomProps) {
               </ul>
             </div>
           </div>
-        </div>
+        </details>
       </section>
 
       <section className="rounded-3xl border border-white/40 bg-white/45 p-3 shadow-sm ring-1 ring-amber-500/10 backdrop-blur-xl">

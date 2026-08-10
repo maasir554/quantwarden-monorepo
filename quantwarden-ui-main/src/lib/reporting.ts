@@ -6,7 +6,8 @@ export type ReportSectionKey =
   | "tierDistribution"
   | "tierAssets"
   | "pqcSupport"
-  | "immediateAttention";
+  | "immediateAttention"
+  | "suggestedChanges";
 
 export type ReportTier = "A" | "B" | "C" | "D" | "F";
 
@@ -67,6 +68,14 @@ export interface ReportImmediateAttentionBucket {
   assets: ReportImmediateAttentionAsset[];
 }
 
+export interface ReportSuggestedChange {
+  assetId: string;
+  assetName: string;
+  port: string;
+  findings: Array<{ label: string; value: string }>;
+  actions: string[];
+}
+
 export interface OrganizationReportPayload {
   organization: {
     id: string;
@@ -101,6 +110,7 @@ export interface OrganizationReportPayload {
   tierDistribution: ReportTierBucket[];
   pqcSupport: ReportSupportBucket[];
   immediateAttention: ReportImmediateAttentionBucket[];
+  suggestedChanges: ReportSuggestedChange[];
   assets: ReportAssetEntry[];
 }
 
@@ -131,13 +141,13 @@ export const REPORT_SECTION_META: Array<{
   },
   {
     key: "tierDistribution",
-    label: "Tier distribution",
-    helper: "Color-coded asset distribution across PQC tiers with infographic bars and percentages.",
+    label: "Tier risk overview",
+    helper: "Controllable tier distribution with asset counts, exposure share, risk level, and interpretation.",
   },
   {
     key: "tierAssets",
-    label: "Assets by tier",
-    helper: "Top 5 assets for each populated tier, followed by the matching Asset Explorer filter link.",
+    label: "Asset-wise risk table",
+    helper: "Controllable asset table with score, tier, covered ports, and primary cryptographic evidence.",
   },
   {
     key: "pqcSupport",
@@ -148,6 +158,11 @@ export const REPORT_SECTION_META: Array<{
     key: "immediateAttention",
     label: "Immediate attention",
     helper: "DNS, certificate, and TLS issues that should be prioritized from the current scan set.",
+  },
+  {
+    key: "suggestedChanges",
+    label: "Suggested changes",
+    helper: "Per-asset and per-port remediation guidance derived from the latest endpoint evidence.",
   },
 ];
 
@@ -160,6 +175,7 @@ export const DEFAULT_REPORT_SECTIONS: Record<ReportSectionKey, boolean> = {
   tierAssets: true,
   pqcSupport: true,
   immediateAttention: true,
+  suggestedChanges: true,
 };
 
 export const REPORT_TIER_ORDER: ReportTier[] = ["A", "B", "C", "D", "F"];
@@ -221,13 +237,46 @@ export const REPORT_SCORING_PILLARS: Array<{
   {
     label: "Protocol version",
     weight: "20 points",
-    description: "Rewards TLS 1.3, gives partial credit to TLS 1.2, and penalizes deprecated protocol exposure.",
+    description: "Awards 20 points for TLS 1.3 only, 5 for TLS 1.2 plus 1.3, and 0 for TLS 1.2 only; deprecated protocol exposure is penalized separately.",
   },
   {
     label: "Authentication and certificate strength",
     weight: "10 points",
     description: "Rewards ECDSA/EdDSA and strong RSA while reducing confidence for weaker certificate posture.",
   },
+];
+
+export const REPORT_SCORING_RULES: Array<{
+  pillar: string;
+  condition: string;
+  points: string;
+}> = [
+  { pillar: "Key exchange", condition: "ML-KEM is negotiated by the endpoint", points: "+40" },
+  { pillar: "Key exchange", condition: "ML-KEM is supported but is not the negotiated default", points: "+20" },
+  { pillar: "Key exchange", condition: "Strong classical group: X25519, X448, secp384r1, or secp521r1", points: "+15" },
+  { pillar: "Key exchange", condition: "Standard classical group: secp256r1 or DHE", points: "+10" },
+  { pillar: "Key exchange", condition: "Legacy, missing, or unknown key exchange", points: "0" },
+  { pillar: "Symmetric encryption", condition: "AES-256-GCM or ChaCha20-Poly1305 is available", points: "+30" },
+  { pillar: "Symmetric encryption", condition: "AES-128-GCM is the strongest available option", points: "+15" },
+  { pillar: "Symmetric encryption", condition: "Another legacy symmetric algorithm is reported", points: "+5" },
+  { pillar: "Symmetric encryption", condition: "No symmetric encryption evidence is reported", points: "0" },
+  { pillar: "Protocol version", condition: "TLS 1.3 only; TLS 1.2 and deprecated versions are disabled", points: "+20" },
+  { pillar: "Protocol version", condition: "TLS 1.2 and TLS 1.3 are enabled", points: "+5" },
+  { pillar: "Protocol version", condition: "TLS 1.3 is enabled together with deprecated TLS", points: "+5" },
+  { pillar: "Protocol version", condition: "TLS 1.2 only, with no TLS 1.3 support", points: "0" },
+  { pillar: "Authentication", condition: "ECDSA, EdDSA, or RSA with at least 3072 bits", points: "+10" },
+  { pillar: "Authentication", condition: "RSA with at least 2048 bits but fewer than 3072 bits", points: "+5" },
+  { pillar: "Authentication", condition: "Weak, missing, or unknown authentication key", points: "0" },
+];
+
+export const REPORT_SCORING_PENALTIES: Array<{
+  condition: string;
+  points: string;
+}> = [
+  { condition: "Self-signed certificate", points: "-50" },
+  { condition: "TLS 1.0 or TLS 1.1 is enabled", points: "-30" },
+  { condition: "RSA key is below 2048 bits", points: "-50" },
+  { condition: "Certificate signature uses SHA-1 or MD5", points: "-50" },
 ];
 
 export function getTierStatus(tier: ReportTier | "Pending") {

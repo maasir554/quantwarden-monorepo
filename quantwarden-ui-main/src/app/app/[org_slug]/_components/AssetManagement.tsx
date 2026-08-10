@@ -105,6 +105,16 @@ interface PortDiscoveryModalScope {
   assetLabel?: string | null;
 }
 
+type EditingPortsSaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
+
+interface EditingPortsSavePayload {
+  targetAsset: { id: string; value: string; type: "root" | "leaf" };
+  ports: AssetPort[];
+  signature: string;
+}
+
+const EDITING_PORTS_SAVE_DEBOUNCE_MS = 700;
+
 interface ManagedRootAsset {
   id: string;
   value: string;
@@ -333,6 +343,10 @@ function toPortDiscoveryDrafts(entries: PortDiscoveryPresetEntry[]): PortDiscove
 export default function AssetManagement({ org, currentUserRole, currentUserId, canManageAssets, canScan }: AssetManagementProps) {
   const orgAssets: any[] = org.assets || [];
   const portInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const editingPortsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editingPortsSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const lastSavedEditingPortsSignatureRef = useRef("");
+  const latestRequestedEditingPortsSignatureRef = useRef("");
   const portDiscoveryCompletionToastRef = useRef<string | null>(null);
   const portDiscoveryListInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const portDiscoveryActivitySignatureRef = useRef<string | null>(null);
@@ -390,7 +404,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
   const [editingPortsAsset, setEditingPortsAsset] = useState<{ id: string; value: string; type: "root" | "leaf" } | null>(null);
   const [editingPorts, setEditingPorts] = useState<AssetPort[]>(createDefaultAssetPorts());
   const [editingPortDrafts, setEditingPortDrafts] = useState<string[]>(() => createDefaultAssetPorts().map((port) => String(port.number)));
-  const [isSavingEditedPorts, setIsSavingEditedPorts] = useState(false);
+  const [editingPortsSaveStatus, setEditingPortsSaveStatus] = useState<EditingPortsSaveStatus>("idle");
   const [discoveredAssetsModal, setDiscoveredAssetsModal] = useState<{
     sourceValue: string;
     assets: Array<{ id: string; value: string; type: "domain" | "ip" | "unknown"; bucket: string; openPorts: AssetPort[] }>;
@@ -544,11 +558,15 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
     setAssetPortDrafts(defaultPorts.map((port) => String(port.number)));
   };
   const resetEditPortsState = () => {
+    if (editingPortsSaveTimerRef.current) {
+      clearTimeout(editingPortsSaveTimerRef.current);
+      editingPortsSaveTimerRef.current = null;
+    }
     setEditingPortsAsset(null);
     const defaultPorts = createDefaultAssetPorts();
     setEditingPorts(defaultPorts);
     setEditingPortDrafts(defaultPorts.map((port) => String(port.number)));
-    setIsSavingEditedPorts(false);
+    setEditingPortsSaveStatus("idle");
   };
   const resetPortDiscoveryModalState = useCallback(() => {
     const defaults = createDefaultPortDiscoveryConfig();
@@ -987,6 +1005,10 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
 
   const openEditPortsModal = (asset: { id: string; value: string; openPorts: AssetPort[] }, type: "root" | "leaf") => {
     const clonedPorts = asset.openPorts.map((port) => ({ ...port }));
+    const signature = JSON.stringify(clonedPorts);
+    lastSavedEditingPortsSignatureRef.current = signature;
+    latestRequestedEditingPortsSignatureRef.current = signature;
+    setEditingPortsSaveStatus("saved");
     setEditingPortsAsset({ id: asset.id, value: asset.value, type });
     setEditingPorts(clonedPorts);
     setEditingPortDrafts(clonedPorts.map((port) => String(port.number)));
@@ -1061,63 +1083,82 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
     });
   };
 
-  const saveEditedPorts = async () => {
-    if (!editingPortsAsset || hasDuplicateEditingPortEntries || hasInvalidEditingPortDrafts || isSavingEditedPorts) return;
+  const enqueueEditedPortsSave = useCallback((save: EditingPortsSavePayload) => {
+    latestRequestedEditingPortsSignatureRef.current = save.signature;
+    setEditingPortsSaveStatus("saving");
 
-    const targetAsset = editingPortsAsset;
-    const nextPorts = editingPorts.map((port) => ({ ...port }));
-    const previousRootAssets = rootAssets;
-    const previousLeafAssets = leafAssets;
-    const previousDiscoveredAssetsModal = discoveredAssetsModal;
+    editingPortsSaveChainRef.current = editingPortsSaveChainRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const response = await fetch(`/api/orgs/assets`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orgId: org.id, id: save.targetAsset.id, openPorts: save.ports }),
+        });
+        const payload = await response.json().catch(() => ({}));
 
-    if (targetAsset.type === "root") {
-      setRootAssets((current) => current.map((asset) => (asset.id === targetAsset.id ? { ...asset, openPorts: nextPorts } : asset)));
-    } else {
-      setLeafAssets((current) => current.map((asset) => (asset.id === targetAsset.id ? { ...asset, openPorts: nextPorts } : asset)));
-    }
-    setDiscoveredAssetsModal((current) => {
-      if (!current) return current;
-      if (!current.assets.some((asset) => asset.id === targetAsset.id)) return current;
+        if (!response.ok) {
+          throw new Error(payload?.error || "Failed to save ports.");
+        }
 
-      return {
-        ...current,
-        assets: current.assets.map((asset) =>
-          asset.id === targetAsset.id ? { ...asset, openPorts: nextPorts } : asset
-        ),
-      };
-    });
+        lastSavedEditingPortsSignatureRef.current = save.signature;
+        if (save.targetAsset.type === "root") {
+          setRootAssets((current) => current.map((asset) =>
+            asset.id === save.targetAsset.id ? { ...asset, openPorts: save.ports } : asset
+          ));
+        } else {
+          setLeafAssets((current) => current.map((asset) =>
+            asset.id === save.targetAsset.id ? { ...asset, openPorts: save.ports } : asset
+          ));
+        }
+        setDiscoveredAssetsModal((current) => {
+          if (!current?.assets.some((asset) => asset.id === save.targetAsset.id)) return current;
+          return {
+            ...current,
+            assets: current.assets.map((asset) =>
+              asset.id === save.targetAsset.id ? { ...asset, openPorts: save.ports } : asset
+            ),
+          };
+        });
 
-    setIsSavingEditedPorts(true);
-
-    try {
-      const response = await fetch(`/api/orgs/assets`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: org.id, id: targetAsset.id, openPorts: nextPorts }),
+        if (latestRequestedEditingPortsSignatureRef.current === save.signature) {
+          setEditingPortsSaveStatus("saved");
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (latestRequestedEditingPortsSignatureRef.current === save.signature) {
+          setEditingPortsSaveStatus("error");
+          toast.error("Could not auto-save ports.", {
+            description: error instanceof Error ? error.message : "Something went wrong while saving ports.",
+          });
+        }
       });
+  }, [org.id]);
 
-      const payload = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(payload?.error || "Failed to save ports.");
+  const closeEditPortsModal = () => {
+    if (
+      editingPortsAsset &&
+      !hasDuplicateEditingPortEntries &&
+      !hasInvalidEditingPortDrafts
+    ) {
+      const ports = editingPorts.map((port) => ({ ...port }));
+      const signature = JSON.stringify(ports);
+      if (signature !== latestRequestedEditingPortsSignatureRef.current) {
+        enqueueEditedPortsSave({ targetAsset: editingPortsAsset, ports, signature });
       }
-
-      toast.success("Ports saved.", {
-        description: `${targetAsset.value} updated successfully.`,
-        position: "bottom-right",
-      });
-      resetEditPortsState();
-    } catch (error) {
-      console.error(error);
-      setRootAssets(previousRootAssets);
-      setLeafAssets(previousLeafAssets);
-      setDiscoveredAssetsModal(previousDiscoveredAssetsModal);
-      toast.error("Could not save ports.", {
-        description: error instanceof Error ? error.message : "Something went wrong while saving ports.",
-      });
-      setIsSavingEditedPorts(false);
-      return;
     }
+    resetEditPortsState();
+  };
+
+  const retryEditedPortsSave = () => {
+    if (!editingPortsAsset || hasDuplicateEditingPortEntries || hasInvalidEditingPortDrafts) return;
+    const ports = editingPorts.map((port) => ({ ...port }));
+    enqueueEditedPortsSave({
+      targetAsset: editingPortsAsset,
+      ports,
+      signature: JSON.stringify(ports),
+    });
   };
 
   const openEditBucketModal = (asset: { id: string; value: string; bucket: string }, assetKind: "root" | "leaf") => {
@@ -1325,6 +1366,41 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
   };
 
   // === Background Sync ===
+  useEffect(() => {
+    if (
+      !editingPortsAsset ||
+      hasDuplicateEditingPortEntries ||
+      hasInvalidEditingPortDrafts
+    ) {
+      return;
+    }
+
+    const ports = editingPorts.map((port) => ({ ...port }));
+    const signature = JSON.stringify(ports);
+    if (signature === latestRequestedEditingPortsSignatureRef.current) {
+      return;
+    }
+
+    setEditingPortsSaveStatus("pending");
+    editingPortsSaveTimerRef.current = setTimeout(() => {
+      editingPortsSaveTimerRef.current = null;
+      enqueueEditedPortsSave({ targetAsset: editingPortsAsset, ports, signature });
+    }, EDITING_PORTS_SAVE_DEBOUNCE_MS);
+
+    return () => {
+      if (editingPortsSaveTimerRef.current) {
+        clearTimeout(editingPortsSaveTimerRef.current);
+        editingPortsSaveTimerRef.current = null;
+      }
+    };
+  }, [
+    editingPortsAsset,
+    editingPorts,
+    hasDuplicateEditingPortEntries,
+    hasInvalidEditingPortDrafts,
+    enqueueEditedPortsSave,
+  ]);
+
   useEffect(() => {
     const interval = setInterval(() => {
       let shouldPoll = false;
@@ -2058,14 +2134,11 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                     <div key={index} className="flex items-center gap-2">
                       <div className="min-w-0 flex-1">
                         <input
-                          type="number"
-                          min={1}
-                          max={65535}
+                          type="text"
+                          inputMode="numeric"
                           value={assetPortDrafts[index] ?? String(port.number)}
                           onChange={(e) => updateModalPortDraft(index, e.target.value)}
                           onBlur={() => commitModalPortDraft(index)}
-                          onFocus={(e) => e.currentTarget.select()}
-                          onClick={(e) => e.currentTarget.select()}
                           ref={(node) => {
                             portInputRefs.current[index] = node;
                           }}
@@ -2226,12 +2299,10 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                                   inputMode="numeric"
                                   value={entry.portDraft}
                                   onChange={(e) => {
-                                    if (/^\\d*$/.test(e.target.value)) {
+                                    if (/^\d*$/.test(e.target.value)) {
                                       updatePortDiscoveryEntry(entry.id, { portDraft: e.target.value });
                                     }
                                   }}
-                                  onFocus={(e) => e.currentTarget.select()}
-                                  onClick={(e) => e.currentTarget.select()}
                                   ref={(node) => {
                                     portDiscoveryListInputRefs.current[index] = node;
                                   }}
@@ -2289,7 +2360,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                         inputMode="numeric"
                         value={portDiscoveryProbeBatchSize}
                         onChange={(e) => {
-                          if (/^\\d*$/.test(e.target.value)) {
+                          if (/^\d*$/.test(e.target.value)) {
                             setPortDiscoveryProbeBatchSize(e.target.value);
                           }
                         }}
@@ -2311,7 +2382,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                         inputMode="numeric"
                         value={portDiscoveryProbeTimeoutMs}
                         onChange={(e) => {
-                          if (/^\\d*$/.test(e.target.value)) {
+                          if (/^\d*$/.test(e.target.value)) {
                             setPortDiscoveryProbeTimeoutMs(e.target.value);
                           }
                         }}
@@ -2510,7 +2581,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
     {canManageAssets && editingPortsAsset && typeof document !== "undefined" && ReactDOM.createPortal((
       <div
         className="fixed inset-0 z-[130] flex items-center justify-center bg-black/35 p-4 backdrop-blur-sm"
-        onClick={resetEditPortsState}
+        onClick={closeEditPortsModal}
       >
         <div
           className="w-full max-w-2xl rounded-2xl border border-amber-300/40 bg-[#fffaf3] shadow-2xl"
@@ -2524,7 +2595,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
               </div>
               <button
                 type="button"
-                onClick={resetEditPortsState}
+                onClick={closeEditPortsModal}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-amber-300/40 bg-white text-[#8a5d33] transition-colors hover:bg-amber-50 hover:text-[#3d200a]"
                 aria-label="Close edit ports modal"
               >
@@ -2556,14 +2627,11 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                     <div key={index} className="flex items-center gap-2">
                       <div className="min-w-0 flex-1">
                         <input
-                          type="number"
-                          min={1}
-                          max={65535}
+                          type="text"
+                          inputMode="numeric"
                           value={editingPortDrafts[index] ?? String(port.number)}
                           onChange={(e) => updateEditingPortDraft(index, e.target.value)}
                           onBlur={() => commitEditingPortDraft(index)}
-                          onFocus={(e) => e.currentTarget.select()}
-                          onClick={(e) => e.currentTarget.select()}
                           ref={(node) => {
                             portInputRefs.current[index] = node;
                           }}
@@ -2613,21 +2681,36 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
               </div>
             </div>
             <div className="px-4 pb-4 pt-2">
-              <button
-                type="button"
-                onClick={saveEditedPorts}
-                disabled={hasDuplicateEditingPortEntries || hasInvalidEditingPortDrafts || isSavingEditedPorts}
-                className="inline-flex h-11 w-full items-center justify-center rounded-full bg-[#8B0000] text-sm font-bold text-white transition-colors hover:bg-[#730000] disabled:cursor-not-allowed disabled:opacity-40"
+              <div
+                aria-live="polite"
+                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-full border px-4 text-sm font-bold ${
+                  editingPortsSaveStatus === "error"
+                    ? "border-red-200 bg-red-50 text-red-700"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                }`}
               >
-                {isSavingEditedPorts ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving Ports...
-                  </>
-                ) : (
-                  "Save Ports"
+                {editingPortsSaveStatus === "pending" && (
+                  <><Clock className="h-4 w-4" /> Saving after you finish typing…</>
                 )}
-              </button>
+                {editingPortsSaveStatus === "saving" && (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Saving ports…</>
+                )}
+                {(editingPortsSaveStatus === "saved" || editingPortsSaveStatus === "idle") && (
+                  <><CheckCircle2 className="h-4 w-4" /> Port changes save automatically</>
+                )}
+                {editingPortsSaveStatus === "error" && (
+                  <>
+                    <TriangleAlert className="h-4 w-4" /> Auto-save failed.
+                    <button
+                      type="button"
+                      onClick={retryEditedPortsSave}
+                      className="underline underline-offset-2"
+                    >
+                      Retry
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>

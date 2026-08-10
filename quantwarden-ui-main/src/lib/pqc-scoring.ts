@@ -96,13 +96,23 @@ export function calculatePqcScore(scanData: any | null): PqcAssessment | null {
     });
   }
 
-  if (supportsTls13) {
+  const supportsDeprecatedTls = supportsTls10 || supportsTls11;
+
+  if (supportsTls13 && !supportsTls12 && !supportsDeprecatedTls) {
     protoScore = 20;
-    protoLabel = "TLS 1.3 Available";
+    protoLabel = "TLS 1.3 Only";
     protoPassed = true;
+  } else if (supportsTls13 && supportsTls12) {
+    protoScore = 5;
+    protoLabel = "TLS 1.2 + TLS 1.3";
+    protoPassed = false;
+  } else if (supportsTls13) {
+    protoScore = 5;
+    protoLabel = "TLS 1.3 + Deprecated TLS";
+    protoPassed = false;
   } else if (supportsTls12) {
-    protoScore = 10;
-    protoLabel = "TLS 1.2 Only";
+    protoScore = 0;
+    protoLabel = supportsDeprecatedTls ? "TLS 1.2 + Deprecated TLS" : "TLS 1.2 Only";
     protoPassed = false;
   }
 

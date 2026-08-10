@@ -138,12 +138,26 @@ export function PqcMethodologyModal({ isOpen, onClose }: { isOpen: boolean, onCl
                   <div className="bg-white/70 px-4 py-3 space-y-1 backdrop-blur-md">
                     <div className="flex items-center gap-4 py-2 border-b border-amber-600/15 last:border-0">
                       <div className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center font-bold text-xs bg-emerald-100 text-emerald-700">+20</div>
-                      <p className="text-sm text-gray-700 font-medium">TLS 1.3 Available</p>
+                      <div>
+                        <p className="text-sm text-gray-700 font-medium">TLS 1.3 only</p>
+                        <p className="mt-0.5 text-xs text-gray-500">Best: the endpoint has removed TLS 1.2 and all deprecated versions.</p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-4 py-2 border-b border-amber-600/15 last:border-0">
-                      <div className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center font-bold text-xs bg-blue-50 text-blue-600">+10</div>
-                      <p className="text-sm text-gray-700 font-medium">TLS 1.2 Only</p>
+                      <div className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center font-bold text-xs bg-blue-50 text-blue-600">+5</div>
+                      <div>
+                        <p className="text-sm text-gray-700 font-medium">TLS 1.2 and TLS 1.3</p>
+                        <p className="mt-0.5 text-xs text-gray-500">Better: modern TLS 1.3 is available, with TLS 1.2 retained for compatibility.</p>
+                      </div>
                     </div>
+                    <div className="flex items-center gap-4 py-2 border-b border-amber-600/15 last:border-0">
+                      <div className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center font-bold text-xs bg-amber-50 text-amber-700">0</div>
+                      <div>
+                        <p className="text-sm text-gray-700 font-medium">TLS 1.2 only</p>
+                        <p className="mt-0.5 text-xs text-gray-500">Low: supported, but the endpoint has no TLS 1.3 capability.</p>
+                      </div>
+                    </div>
+                    <p className="px-2 pt-2 text-xs text-red-700/80">TLS 1.0 or TLS 1.1 exposure also triggers the separate deprecated-protocol penalty.</p>
                   </div>
                 </details>
 

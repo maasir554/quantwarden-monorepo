@@ -674,6 +674,61 @@ function OverviewBarChart({
   );
 }
 
+function TlsVersionPostureChart({ data }: { data: CountDatum[] }) {
+  const total = data.reduce((sum, entry) => sum + entry.value, 0);
+  const visualConfig: Record<string, { color: string; surface: string; label: string }> = {
+    "TLS 1.2 only": { color: "#d97706", surface: "border-amber-200 bg-amber-50", label: "Low" },
+    "TLS 1.2 + 1.3": { color: "#2563eb", surface: "border-blue-200 bg-blue-50", label: "Better" },
+    "TLS 1.3 only": { color: "#059669", surface: "border-emerald-200 bg-emerald-50", label: "Best" },
+    "Legacy / other": { color: "#dc2626", surface: "border-red-200 bg-red-50", label: "Action needed" },
+  };
+
+  if (total === 0) {
+    return (
+      <div className="flex min-h-[170px] items-center justify-center rounded-2xl border-2 border-dashed border-amber-500/20">
+        <p className="text-sm font-semibold text-[#8a5d33]/50">Complete a scan to view TLS version posture</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 flex-col justify-center gap-4">
+      <div className="flex h-4 overflow-hidden rounded-full bg-stone-100" aria-label={`${total} scanned TLS endpoints`}>
+        {data.filter((entry) => entry.value > 0).map((entry) => (
+          <div
+            key={entry.name}
+            title={`${entry.name}: ${entry.value} endpoints (${formatPercent(entry.value, total)})`}
+            style={{
+              width: `${(entry.value / total) * 100}%`,
+              backgroundColor: visualConfig[entry.name]?.color || "#78716c",
+            }}
+          />
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {data.map((entry) => {
+          const config = visualConfig[entry.name] || visualConfig["Legacy / other"];
+          return (
+            <div key={entry.name} className={`rounded-xl border px-3 py-2.5 ${config.surface}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-xs font-extrabold text-[#3d200a]">{entry.name}</span>
+                <span className="text-sm font-black text-[#3d200a]">{entry.value}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-2 text-[10px] font-bold">
+                <span style={{ color: config.color }}>{config.label}</span>
+                <span className="text-[#8a5d33]/65">{formatPercent(entry.value, total)}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[11px] font-semibold leading-relaxed text-[#8a5d33]/70">
+        Each endpoint is classified by its complete supported TLS version set, rather than only its highest version.
+      </p>
+    </div>
+  );
+}
+
 function TopCertificateCommonNamesCard({
   rows,
 }: {
@@ -920,18 +975,9 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
         <article className="flex h-full min-h-[14.5rem] flex-col rounded-3xl border border-amber-500/20 bg-white/60 p-6 shadow-sm backdrop-blur">
           <div className="mb-2 flex items-center gap-2">
             <Lock className="h-5 w-5 text-blue-600" />
-            <h2 className="text-base font-bold text-[#3d200a]">Latest TLS Version</h2>
+            <h2 className="text-base font-bold text-[#3d200a]">TLS Version Posture</h2>
           </div>
-          <OverviewBarChart
-            data={data.tlsChartData || []}
-            emptyLabel="Complete a scan to view protocol distribution"
-            color="#8B0000"
-            labelColor="#8B0000"
-            yAxisWidth={82}
-            onSelect={(name) =>
-              router.push(`/app/${org.slug}/explore?tls=${encodeURIComponent(name)}&tlsMatch=exact_latest`)
-            }
-          />
+          <TlsVersionPostureChart data={data.tlsChartData || []} />
         </article>
 
         <article className="flex h-full min-h-[14.5rem] flex-col rounded-3xl border border-amber-500/20 bg-white/60 p-6 shadow-sm backdrop-blur">
