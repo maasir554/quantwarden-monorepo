@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
-import { ensureSuperAdminMemberships, isSuperAdminEmail } from "@/lib/super-admin";
+import { ensureSuperAdminMemberships, isSuperAdminUser } from "@/lib/super-admin";
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     }
 
     const userId = session.user.id;
-    if (isSuperAdminEmail(session.user.email)) {
+    if (await isSuperAdminUser(userId, session.user.email)) {
       await ensureSuperAdminMemberships(userId);
     }
 

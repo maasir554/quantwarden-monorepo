@@ -28,6 +28,7 @@ type AdminUser = {
   hasPassword: boolean;
   organizationCount: number;
   superAdmin: boolean;
+  configuredSuperAdmin: boolean;
   createdAt: string;
 };
 
@@ -94,6 +95,7 @@ export default function AdminConsole() {
   const [section, setSection] = useState<AdminSection>("users");
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [currentUserId, setCurrentUserId] = useState("");
   const [organizations, setOrganizations] = useState<AdminOrganization[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -130,6 +132,7 @@ export default function AdminConsole() {
         jsonRequest("/api/admin/users", { cache: "no-store" }),
         jsonRequest("/api/admin/organizations", { cache: "no-store" }),
       ]);
+      setCurrentUserId(usersData.currentUserId || "");
       setUsers(usersData.users || []);
       setOrganizations(organizationsData.organizations || []);
     } catch (caught) {
@@ -222,6 +225,26 @@ export default function AdminConsole() {
       await loadOverview();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not delete account.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setSuperAdmin = async (user: AdminUser, superAdmin: boolean) => {
+    const action = superAdmin ? "grant super-admin access to" : "revoke super-admin access from";
+    if (!window.confirm(`Are you sure you want to ${action} ${user.email}?`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      await jsonRequest("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, action: "setSuperAdmin", superAdmin }),
+      });
+      notify(superAdmin ? "Super-admin access granted." : "Super-admin access revoked.");
+      await loadOverview();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update super-admin access.");
     } finally {
       setBusy(false);
     }
@@ -399,7 +422,7 @@ export default function AdminConsole() {
         ) : section === "users" ? (
           filteredUsers.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-sm">
+              <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-500">
                   <tr><th className="px-5 py-3">User</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Organizations</th><th className="px-4 py-3">Created</th><th className="px-5 py-3 text-right">Actions</th></tr>
                 </thead>
@@ -410,7 +433,7 @@ export default function AdminConsole() {
                       <td className="px-4 py-4"><div className="flex flex-wrap gap-1.5"><span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">Verified</span>{user.superAdmin ? <span className="rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-[#8B0000]">Super admin</span> : null}</div></td>
                       <td className="px-4 py-4 text-slate-600">{user.organizationCount}</td>
                       <td className="px-4 py-4 text-slate-600">{new Date(user.createdAt).toLocaleDateString()}</td>
-                      <td className="px-5 py-4"><div className="flex justify-end gap-2"><button type="button" onClick={() => openUserEditor(user)} className={secondaryButtonClass} title="Edit account"><Pencil className="h-4 w-4" /> Edit</button><button type="button" disabled={user.superAdmin || busy} onClick={() => deleteUser(user)} className="rounded-lg border border-slate-300 p-2 text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-30" title="Delete account"><Trash2 className="h-4 w-4" /></button></div></td>
+                      <td className="px-5 py-4"><div className="flex justify-end gap-2"><button type="button" disabled={busy || user.configuredSuperAdmin || (user.superAdmin && user.id === currentUserId)} onClick={() => setSuperAdmin(user, !user.superAdmin)} className={secondaryButtonClass} title={user.configuredSuperAdmin ? "Configured administrator" : user.superAdmin ? "Revoke super-admin access" : "Make super admin"}><ShieldCheck className="h-4 w-4" /> {user.superAdmin ? "Revoke admin" : "Make admin"}</button><button type="button" onClick={() => openUserEditor(user)} className={secondaryButtonClass} title="Edit account"><Pencil className="h-4 w-4" /> Edit</button><button type="button" disabled={user.superAdmin || busy} onClick={() => deleteUser(user)} className="rounded-lg border border-slate-300 p-2 text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-30" title="Delete account"><Trash2 className="h-4 w-4" /></button></div></td>
                     </tr>
                   ))}
                 </tbody>

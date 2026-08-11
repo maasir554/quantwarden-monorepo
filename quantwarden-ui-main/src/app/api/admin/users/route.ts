@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validatePassword } from "@/lib/guest-auth";
 import { prisma } from "@/lib/prisma";
-import { getSuperAdminAuth, isSuperAdminEmail } from "@/lib/super-admin";
+import {
+  ensureSuperAdminMemberships,
+  getSuperAdminAuth,
+  isSuperAdminEmail,
+  revokeSuperAdminMemberships,
+} from "@/lib/super-admin";
 import { auth } from "@/lib/auth";
 
 function normalizeEmail(value: unknown) {
@@ -31,6 +36,7 @@ export async function GET() {
         name: true,
         email: true,
         emailVerified: true,
+        isSuperAdmin: true,
         createdAt: true,
         accounts: {
           where: { providerId: "credential" },
@@ -41,6 +47,7 @@ export async function GET() {
     });
 
     return NextResponse.json({
+      currentUserId: admin.session.user.id,
       users: users.map((user) => ({
         id: user.id,
         name: user.name,
@@ -48,7 +55,8 @@ export async function GET() {
         emailVerified: user.emailVerified,
         hasPassword: user.accounts.some((account) => Boolean(account.password)),
         organizationCount: user._count.members,
-        superAdmin: isSuperAdminEmail(user.email),
+        superAdmin: user.isSuperAdmin || isSuperAdminEmail(user.email),
+        configuredSuperAdmin: isSuperAdminEmail(user.email),
         createdAt: user.createdAt,
       })),
     });
@@ -124,6 +132,38 @@ export async function PATCH(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const userId = typeof body.userId === "string" ? body.userId : "";
+
+    if (body.action === "setSuperAdmin") {
+      const target = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, isSuperAdmin: true },
+      });
+      if (!target) return NextResponse.json({ error: "User not found." }, { status: 404 });
+
+      const makeSuperAdmin = body.superAdmin === true;
+      if (!makeSuperAdmin && isSuperAdminEmail(target.email)) {
+        return NextResponse.json(
+          { error: "The configured super-admin cannot be revoked from the dashboard." },
+          { status: 400 }
+        );
+      }
+      if (!makeSuperAdmin && target.id === admin.session.user.id) {
+        return NextResponse.json({ error: "You cannot revoke your own super-admin access." }, { status: 400 });
+      }
+
+      await prisma.user.update({
+        where: { id: target.id },
+        data: { isSuperAdmin: makeSuperAdmin },
+      });
+      if (makeSuperAdmin) {
+        await ensureSuperAdminMemberships(target.id);
+      } else {
+        await revokeSuperAdminMemberships(target.id);
+      }
+
+      return NextResponse.json({ success: true, superAdmin: makeSuperAdmin });
+    }
+
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const email = normalizeEmail(body.email);
 
@@ -195,9 +235,12 @@ export async function DELETE(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const userId = typeof body.userId === "string" ? body.userId : "";
-    const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } });
+    const target = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, isSuperAdmin: true },
+    });
     if (!target) return NextResponse.json({ error: "User not found." }, { status: 404 });
-    if (target.id === admin.session.user.id || isSuperAdminEmail(target.email)) {
+    if (target.id === admin.session.user.id || target.isSuperAdmin || isSuperAdminEmail(target.email)) {
       return NextResponse.json({ error: "The active super-admin account cannot be deleted." }, { status: 400 });
     }
 

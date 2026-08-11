@@ -14,15 +14,38 @@ export function isSuperAdminEmail(email: string | null | undefined): boolean {
   return getSuperAdminEmails().includes(email.trim().toLowerCase());
 }
 
+export async function isSuperAdminUser(
+  userId: string,
+  email?: string | null
+): Promise<boolean> {
+  if (isSuperAdminEmail(email)) return true;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isSuperAdmin: true },
+  });
+  return Boolean(user?.isSuperAdmin);
+}
+
 export async function getSuperAdminAuth() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {
     return { ok: false as const, status: 401 as const, error: "Unauthorized" };
   }
-  if (!isSuperAdminEmail(session.user.email)) {
+  if (!(await isSuperAdminUser(session.user.id, session.user.email))) {
     return { ok: false as const, status: 403 as const, error: "Super-admin access required." };
   }
   return { ok: true as const, session };
+}
+
+export async function revokeSuperAdminMemberships(userId: string): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM "member" m
+     USING "organization" o
+     WHERE m."organizationId" = o.id
+       AND m."userId" = $1
+       AND m.id = md5(o.id || $1 || 'quantwarden-super-admin')`,
+    userId
+  );
 }
 
 export async function ensureSuperAdminMemberships(userId: string): Promise<void> {

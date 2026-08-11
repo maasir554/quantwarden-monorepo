@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { ensureSuperAdminOrganizationMembership, isSuperAdminEmail } from "@/lib/super-admin";
+import { ensureSuperAdminOrganizationMembership, isSuperAdminUser } from "@/lib/super-admin";
 
 export interface OrgMemberAccess {
   memberId: string;
@@ -59,7 +59,7 @@ export async function getOrgMemberAccess(orgId: string, userId: string): Promise
 
   if (rows.length === 0) {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
-    if (!isSuperAdminEmail(user?.email)) return null;
+    if (!(await isSuperAdminUser(userId, user?.email))) return null;
 
     await ensureSuperAdminOrganizationMembership(userId, orgId);
     rows = await prisma.$queryRawUnsafe<MemberPermissionRow[]>(

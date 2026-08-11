@@ -29,6 +29,7 @@ model User {
   name          String
   email         String
   emailVerified Boolean      @default(false)
+  isSuperAdmin  Boolean      @default(false)
   image         String?
   // Guest (email-free) accounts. Null for normal email users. See guest-auth.ts.
   username        String?    @unique

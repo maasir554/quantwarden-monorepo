@@ -122,13 +122,13 @@ export async function PATCH(
 
     const member = await prisma.member.findFirst({
       where: { id: memberId, organizationId },
-      include: { user: { select: { email: true } } },
+      include: { user: { select: { email: true, isSuperAdmin: true } } },
     });
     if (!member) return NextResponse.json({ error: "Member not found." }, { status: 404 });
     if (member.role.toLowerCase() === "owner") {
       return NextResponse.json({ error: "Organization ownership must be transferred explicitly." }, { status: 409 });
     }
-    if (isSuperAdminEmail(member.user.email)) {
+    if (member.user.isSuperAdmin || isSuperAdminEmail(member.user.email)) {
       return NextResponse.json({ error: "The configured super-admin membership is protected." }, { status: 400 });
     }
 
@@ -152,10 +152,10 @@ export async function DELETE(
     const memberId = typeof body.memberId === "string" ? body.memberId : "";
     const member = await prisma.member.findFirst({
       where: { id: memberId, organizationId },
-      include: { user: { select: { email: true } } },
+      include: { user: { select: { email: true, isSuperAdmin: true } } },
     });
     if (!member) return NextResponse.json({ error: "Member not found." }, { status: 404 });
-    if (member.role.toLowerCase() === "owner" || isSuperAdminEmail(member.user.email)) {
+    if (member.role.toLowerCase() === "owner" || member.user.isSuperAdmin || isSuperAdminEmail(member.user.email)) {
       return NextResponse.json({ error: "Owner and super-admin memberships are protected." }, { status: 409 });
     }
 
