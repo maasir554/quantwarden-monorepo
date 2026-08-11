@@ -3,19 +3,22 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowLeft,
   Building2,
   CheckCircle2,
   ExternalLink,
-  KeyRound,
   Loader2,
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   ShieldCheck,
   Trash2,
   Users,
   X,
 } from "lucide-react";
+
+type AdminSection = "users" | "organizations";
 
 type AdminUser = {
   id: string;
@@ -57,6 +60,10 @@ type MemberPanel = {
   roles: OrganizationRole[];
 };
 
+const inputClass = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#8B0000] focus:ring-2 focus:ring-[#8B0000]/10 disabled:bg-slate-100";
+const secondaryButtonClass = "inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const primaryButtonClass = "inline-flex items-center justify-center gap-2 rounded-lg bg-[#8B0000] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#730000] disabled:cursor-not-allowed disabled:opacity-50";
+
 async function jsonRequest(url: string, init?: RequestInit) {
   const response = await fetch(url, init);
   const data = await response.json();
@@ -64,7 +71,28 @@ async function jsonRequest(url: string, init?: RequestInit) {
   return data;
 }
 
+function Modal({ title, description, onClose, children }: { title: string; description?: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-label={title} className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+            {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
+          </div>
+          <button type="button" onClick={onClose} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900" aria-label="Close">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminConsole() {
+  const [section, setSection] = useState<AdminSection>("users");
+  const [query, setQuery] = useState("");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [organizations, setOrganizations] = useState<AdminOrganization[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,6 +100,7 @@ export default function AdminConsole() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
+  const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createEmail, setCreateEmail] = useState("");
   const [createPassword, setCreatePassword] = useState("");
@@ -120,6 +149,15 @@ export default function AdminConsole() {
     window.setTimeout(() => setMessage(""), 3500);
   };
 
+  const openCreateModal = () => {
+    setCreateName("");
+    setCreateEmail("");
+    setCreatePassword("");
+    setCreateConfirm("");
+    setError("");
+    setCreateOpen(true);
+  };
+
   const createUser = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -128,18 +166,10 @@ export default function AdminConsole() {
       await jsonRequest("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: createName,
-          email: createEmail,
-          password: createPassword,
-          confirmPassword: createConfirm,
-        }),
+        body: JSON.stringify({ name: createName, email: createEmail, password: createPassword, confirmPassword: createConfirm }),
       });
-      setCreateName("");
-      setCreateEmail("");
-      setCreatePassword("");
-      setCreateConfirm("");
-      notify("Verified credential account created.");
+      setCreateOpen(false);
+      notify("Account created. It can sign in immediately.");
       await loadOverview();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not create account.");
@@ -166,13 +196,7 @@ export default function AdminConsole() {
       await jsonRequest("/api/admin/users", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: editingUser.id,
-          name: editName,
-          email: editEmail,
-          password: editPassword,
-          confirmPassword: editConfirm,
-        }),
+        body: JSON.stringify({ userId: editingUser.id, name: editName, email: editEmail, password: editPassword, confirmPassword: editConfirm }),
       });
       setEditingUser(null);
       notify(editPassword ? "Account and password updated." : "Account updated.");
@@ -220,12 +244,7 @@ export default function AdminConsole() {
       await jsonRequest("/api/admin/organizations", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          organizationId: editingOrg.id,
-          name: editOrgName,
-          isPublic: editOrgPublic,
-          discoverable: editOrgDiscoverable,
-        }),
+        body: JSON.stringify({ organizationId: editingOrg.id, name: editOrgName, isPublic: editOrgPublic, discoverable: editOrgDiscoverable }),
       });
       setEditingOrg(null);
       notify("Organization settings updated.");
@@ -327,107 +346,158 @@ export default function AdminConsole() {
     }
   };
 
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredUsers = users.filter((user) => !normalizedQuery || `${user.name} ${user.email}`.toLowerCase().includes(normalizedQuery));
+  const filteredOrganizations = organizations.filter((organization) => !normalizedQuery || `${organization.name} ${organization.slug}`.toLowerCase().includes(normalizedQuery));
+
   return (
-    <div className="space-y-7">
-      <section className="relative overflow-hidden rounded-3xl bg-[#3d200a] p-7 text-white shadow-xl">
-        <ShieldCheck className="absolute -right-6 -top-8 h-40 w-40 text-white/5" />
-        <div className="relative">
-          <p className="text-xs font-bold uppercase tracking-[0.25em] text-amber-300">Protected operations</p>
-          <h1 className="mt-2 text-3xl font-black">Super Admin Console</h1>
-          <p className="mt-2 max-w-3xl text-sm text-white/70">
-            Provision verified credentials, inspect organizations, and manage membership and permissions.
-          </p>
+    <div className="mx-auto max-w-7xl space-y-6">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <Link href="/app" className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-900">
+            <ArrowLeft className="h-4 w-4" /> Back to dashboard
+          </Link>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Administration</h1>
+          <p className="mt-1 text-sm text-slate-600">Manage user access and organizations.</p>
         </div>
-      </section>
+        <button type="button" onClick={loadOverview} className={secondaryButtonClass} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
+        </button>
+      </header>
 
-      {error ? <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">{error}</div> : null}
-      {message ? <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{message}</div> : null}
+      <nav aria-label="Admin sections" className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+        <button type="button" onClick={() => { setSection("users"); setQuery(""); }} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition sm:flex-none ${section === "users" ? "bg-[#8B0000] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"}`}>
+          <Users className="h-4 w-4" /> Users <span className={section === "users" ? "text-white/70" : "text-slate-400"}>{users.length}</span>
+        </button>
+        <button type="button" onClick={() => { setSection("organizations"); setQuery(""); }} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition sm:flex-none ${section === "organizations" ? "bg-[#8B0000] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"}`}>
+          <Building2 className="h-4 w-4" /> Organizations <span className={section === "organizations" ? "text-white/70" : "text-slate-400"}>{organizations.length}</span>
+        </button>
+      </nav>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {[
-          ["Accounts", users.length, Users],
-          ["Organizations", organizations.length, Building2],
-          ["Assets", organizations.reduce((sum, org) => sum + org.assetCount, 0), ShieldCheck],
-        ].map(([label, value, Icon]) => {
-          const MetricIcon = Icon as typeof Users;
-          return (
-            <div key={String(label)} className="rounded-2xl border border-amber-500/20 bg-white p-5 shadow-sm">
-              <MetricIcon className="h-5 w-5 text-[#8B0000]" />
-              <p className="mt-3 text-3xl font-black text-[#3d200a]">{String(value)}</p>
-              <p className="text-sm font-semibold text-[#8a5d33]">{String(label)}</p>
-            </div>
-          );
-        })}
-      </div>
+      {error ? <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div> : null}
+      {message ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</div> : null}
 
-      <section className="rounded-2xl border border-amber-500/20 bg-white p-6 shadow-sm">
-        <div className="mb-5 flex items-center justify-between gap-3">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl font-black text-[#3d200a]">Create verified credentials</h2>
-            <p className="text-sm text-[#8a5d33]">These accounts can sign in immediately without OTP.</p>
+            <h2 className="text-lg font-semibold text-slate-950">{section === "users" ? "Users" : "Organizations"}</h2>
+            <p className="mt-0.5 text-sm text-slate-500">
+              {section === "users" ? "Create credentials and manage account access." : "Inspect workspaces, membership, and permissions."}
+            </p>
           </div>
-          <KeyRound className="h-6 w-6 text-[#8B0000]" />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${section}`} className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-[#8B0000] focus:ring-2 focus:ring-[#8B0000]/10 sm:w-64" />
+            </label>
+            {section === "users" ? <button type="button" onClick={openCreateModal} className={primaryButtonClass}><Plus className="h-4 w-4" /> Create account</button> : null}
+          </div>
         </div>
-        <form onSubmit={createUser} className="grid grid-cols-1 gap-3 lg:grid-cols-4">
-          <input required value={createName} onChange={(event) => setCreateName(event.target.value)} placeholder="Full name" className="rounded-xl border border-amber-500/25 px-3 py-2.5 outline-none focus:ring-2 focus:ring-[#8B0000]/25" />
-          <input required type="email" value={createEmail} onChange={(event) => setCreateEmail(event.target.value)} placeholder="Email address" className="rounded-xl border border-amber-500/25 px-3 py-2.5 outline-none focus:ring-2 focus:ring-[#8B0000]/25" />
-          <input required type="password" minLength={8} value={createPassword} onChange={(event) => setCreatePassword(event.target.value)} placeholder="Password" className="rounded-xl border border-amber-500/25 px-3 py-2.5 outline-none focus:ring-2 focus:ring-[#8B0000]/25" />
-          <input required type="password" minLength={8} value={createConfirm} onChange={(event) => setCreateConfirm(event.target.value)} placeholder="Retype password" className="rounded-xl border border-amber-500/25 px-3 py-2.5 outline-none focus:ring-2 focus:ring-[#8B0000]/25" />
-          <button disabled={busy || createPassword !== createConfirm} className="lg:col-span-4 inline-flex items-center justify-center gap-2 rounded-xl bg-[#8B0000] px-4 py-3 font-bold text-white hover:bg-[#730000] disabled:opacity-50">
-            {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />} Create account
-          </button>
-        </form>
+
+        {loading ? (
+          <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-[#8B0000]" /></div>
+        ) : section === "users" ? (
+          filteredUsers.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-500">
+                  <tr><th className="px-5 py-3">User</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Organizations</th><th className="px-4 py-3">Created</th><th className="px-5 py-3 text-right">Actions</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {filteredUsers.map((user) => (
+                    <tr key={user.id} className="hover:bg-slate-50/70">
+                      <td className="px-5 py-4"><p className="font-medium text-slate-950">{user.name}</p><p className="mt-0.5 text-slate-500">{user.email}</p></td>
+                      <td className="px-4 py-4"><div className="flex flex-wrap gap-1.5"><span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">Verified</span>{user.superAdmin ? <span className="rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-[#8B0000]">Super admin</span> : null}</div></td>
+                      <td className="px-4 py-4 text-slate-600">{user.organizationCount}</td>
+                      <td className="px-4 py-4 text-slate-600">{new Date(user.createdAt).toLocaleDateString()}</td>
+                      <td className="px-5 py-4"><div className="flex justify-end gap-2"><button type="button" onClick={() => openUserEditor(user)} className={secondaryButtonClass} title="Edit account"><Pencil className="h-4 w-4" /> Edit</button><button type="button" disabled={user.superAdmin || busy} onClick={() => deleteUser(user)} className="rounded-lg border border-slate-300 p-2 text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-30" title="Delete account"><Trash2 className="h-4 w-4" /></button></div></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <div className="px-6 py-16 text-center text-sm text-slate-500">No users match your search.</div>
+        ) : filteredOrganizations.length ? (
+          <div className="divide-y divide-slate-200">
+            {filteredOrganizations.map((organization) => (
+              <article key={organization.id} className="px-5 py-5 hover:bg-slate-50/70">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2"><h3 className="truncate font-semibold text-slate-950">{organization.name}</h3><span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-500">{organization.slug}</span></div>
+                    <p className="mt-2 text-sm text-slate-500">{organization.memberCount} members · {organization.assetCount} assets · {organization.scanCount} scans · Created {new Date(organization.createdAt).toLocaleDateString()}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Link href={`/app/${organization.slug}`} className={primaryButtonClass}><ExternalLink className="h-4 w-4" /> Open</Link>
+                    <button type="button" onClick={() => loadMembers(organization.id)} className={secondaryButtonClass}><Users className="h-4 w-4" /> Members</button>
+                    <Link href={`/app/${organization.slug}/roles`} className={secondaryButtonClass}><ShieldCheck className="h-4 w-4" /> Permissions</Link>
+                    <button type="button" onClick={() => openOrgEditor(organization)} className={secondaryButtonClass}><Pencil className="h-4 w-4" /> Settings</button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : organizations.length === 0 ? (
+          <div className="px-6 py-16 text-center">
+            <Building2 className="mx-auto h-9 w-9 text-slate-300" />
+            <h3 className="mt-4 font-semibold text-slate-950">No organizations have been created</h3>
+            <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">Organizations will appear here as soon as any user creates one.</p>
+            <Link href="/app" className={`mt-5 ${primaryButtonClass}`}><Plus className="h-4 w-4" /> Create from dashboard</Link>
+          </div>
+        ) : <div className="px-6 py-16 text-center text-sm text-slate-500">No organizations match your search.</div>}
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-amber-500/20 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-amber-500/15 p-5">
-          <h2 className="text-xl font-black text-[#3d200a]">Accounts</h2>
-          <button onClick={loadOverview} className="rounded-lg p-2 text-[#8B0000] hover:bg-[#8B0000]/5" aria-label="Refresh"><RefreshCw className="h-4 w-4" /></button>
-        </div>
-        {loading ? <div className="flex justify-center p-10"><Loader2 className="h-7 w-7 animate-spin text-[#8B0000]" /></div> : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-205 text-sm">
-              <thead className="bg-[#fdf8f0] text-left text-xs uppercase tracking-wider text-[#8a5d33]"><tr><th className="p-3">User</th><th className="p-3">Access</th><th className="p-3">Organizations</th><th className="p-3">Created</th><th className="p-3 text-right">Actions</th></tr></thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr key={user.id} className="border-t border-amber-500/10">
-                    <td className="p-3"><p className="font-bold text-[#3d200a]">{user.name}</p><p className="text-[#8a5d33]">{user.email}</p></td>
-                    <td className="p-3"><span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-800">Verified</span>{user.superAdmin ? <span className="ml-2 rounded-full bg-[#8B0000]/10 px-2 py-1 text-xs font-bold text-[#8B0000]">Super Admin</span> : null}</td>
-                    <td className="p-3 font-semibold text-[#6f4827]">{user.organizationCount}</td>
-                    <td className="p-3 text-[#6f4827]">{new Date(user.createdAt).toLocaleDateString()}</td>
-                    <td className="p-3"><div className="flex justify-end gap-2"><button onClick={() => openUserEditor(user)} className="rounded-lg border border-amber-500/25 p-2 text-[#6f4827] hover:bg-[#fdf1df]" title="Edit or reset password"><Pencil className="h-4 w-4" /></button><button disabled={user.superAdmin || busy} onClick={() => deleteUser(user)} className="rounded-lg border border-red-200 p-2 text-red-700 hover:bg-red-50 disabled:opacity-30" title="Delete"><Trash2 className="h-4 w-4" /></button></div></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <section className="overflow-hidden rounded-2xl border border-amber-500/20 bg-white shadow-sm">
-        <div className="border-b border-amber-500/15 p-5"><h2 className="text-xl font-black text-[#3d200a]">Organizations</h2><p className="text-sm text-[#8a5d33]">Open operational data or manage users and roles.</p></div>
-        <div className="grid grid-cols-1 gap-4 p-5 xl:grid-cols-2">
-          {organizations.map((organization) => (
-            <article key={organization.id} className="rounded-xl border border-amber-500/20 bg-[#fffaf2] p-4">
-              <div className="flex items-start justify-between gap-3"><div><h3 className="font-black text-[#3d200a]">{organization.name}</h3><p className="text-sm font-mono text-[#8a5d33]">{organization.slug}</p></div><button onClick={() => openOrgEditor(organization)} className="rounded-lg p-2 text-[#6f4827] hover:bg-white"><Pencil className="h-4 w-4" /></button></div>
-              <div className="my-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-lg bg-white p-2"><p className="font-black text-[#3d200a]">{organization.memberCount}</p><p className="text-xs text-[#8a5d33]">Members</p></div><div className="rounded-lg bg-white p-2"><p className="font-black text-[#3d200a]">{organization.assetCount}</p><p className="text-xs text-[#8a5d33]">Assets</p></div><div className="rounded-lg bg-white p-2"><p className="font-black text-[#3d200a]">{organization.scanCount}</p><p className="text-xs text-[#8a5d33]">Scans</p></div></div>
-              <div className="flex flex-wrap gap-2"><Link href={`/app/${organization.slug}`} className="inline-flex items-center gap-1 rounded-lg bg-[#8B0000] px-3 py-2 text-sm font-bold text-white"><ExternalLink className="h-4 w-4" /> Open data</Link><button onClick={() => loadMembers(organization.id)} className="inline-flex items-center gap-1 rounded-lg border border-amber-500/25 bg-white px-3 py-2 text-sm font-bold text-[#6f4827]"><Users className="h-4 w-4" /> Members</button><Link href={`/app/${organization.slug}/roles`} className="inline-flex items-center gap-1 rounded-lg border border-amber-500/25 bg-white px-3 py-2 text-sm font-bold text-[#6f4827]"><ShieldCheck className="h-4 w-4" /> Permissions</Link></div>
-            </article>
-          ))}
-        </div>
-      </section>
+      {createOpen ? (
+        <Modal title="Create account" description="This account will be verified and can sign in with its password immediately." onClose={() => !busy && setCreateOpen(false)}>
+          <form onSubmit={createUser} className="space-y-4 p-5">
+            <label className="block text-sm font-medium text-slate-700">Full name<input autoFocus required value={createName} onChange={(event) => setCreateName(event.target.value)} className={`mt-1.5 ${inputClass}`} /></label>
+            <label className="block text-sm font-medium text-slate-700">Email address<input required type="email" value={createEmail} onChange={(event) => setCreateEmail(event.target.value)} className={`mt-1.5 ${inputClass}`} /></label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm font-medium text-slate-700">Password<input required type="password" minLength={8} value={createPassword} onChange={(event) => setCreatePassword(event.target.value)} className={`mt-1.5 ${inputClass}`} /></label>
+              <label className="block text-sm font-medium text-slate-700">Retype password<input required type="password" minLength={8} value={createConfirm} onChange={(event) => setCreateConfirm(event.target.value)} className={`mt-1.5 ${inputClass}`} /></label>
+            </div>
+            {createConfirm && createPassword !== createConfirm ? <p className="text-sm text-red-700">Passwords do not match.</p> : null}
+            <div className="flex justify-end gap-2 border-t border-slate-200 pt-4"><button type="button" onClick={() => setCreateOpen(false)} className={secondaryButtonClass}>Cancel</button><button disabled={busy || createPassword !== createConfirm} className={primaryButtonClass}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Create account</button></div>
+          </form>
+        </Modal>
+      ) : null}
 
       {editingUser ? (
-        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 p-4"><form onSubmit={saveUser} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"><div className="mb-5 flex items-center justify-between"><div><h3 className="text-xl font-black text-[#3d200a]">Edit account</h3><p className="text-sm text-[#8a5d33]">Leave password blank to keep it unchanged.</p></div><button type="button" onClick={() => setEditingUser(null)}><X className="h-5 w-5" /></button></div><div className="space-y-3"><input required value={editName} onChange={(event) => setEditName(event.target.value)} className="w-full rounded-xl border border-amber-500/25 px-3 py-2.5" placeholder="Full name" /><input required type="email" value={editEmail} onChange={(event) => setEditEmail(event.target.value)} disabled={editingUser.superAdmin} className="w-full rounded-xl border border-amber-500/25 px-3 py-2.5 disabled:bg-slate-100" placeholder="Email" /><input type="password" minLength={8} value={editPassword} onChange={(event) => setEditPassword(event.target.value)} className="w-full rounded-xl border border-amber-500/25 px-3 py-2.5" placeholder="New password (optional)" /><input type="password" minLength={8} value={editConfirm} onChange={(event) => setEditConfirm(event.target.value)} className="w-full rounded-xl border border-amber-500/25 px-3 py-2.5" placeholder="Retype new password" /></div><button disabled={busy || Boolean(editPassword) !== Boolean(editConfirm) || editPassword !== editConfirm} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#8B0000] px-4 py-3 font-bold text-white disabled:opacity-50">{busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />} Save changes</button></form></div>
+        <Modal title="Edit account" description="Update the account details or assign a new password." onClose={() => !busy && setEditingUser(null)}>
+          <form onSubmit={saveUser} className="space-y-4 p-5">
+            <label className="block text-sm font-medium text-slate-700">Full name<input required value={editName} onChange={(event) => setEditName(event.target.value)} className={`mt-1.5 ${inputClass}`} /></label>
+            <label className="block text-sm font-medium text-slate-700">Email address<input required type="email" value={editEmail} onChange={(event) => setEditEmail(event.target.value)} disabled={editingUser.superAdmin} className={`mt-1.5 ${inputClass}`} /></label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm font-medium text-slate-700">New password<input type="password" minLength={8} value={editPassword} onChange={(event) => setEditPassword(event.target.value)} placeholder="Leave blank to keep" className={`mt-1.5 ${inputClass}`} /></label>
+              <label className="block text-sm font-medium text-slate-700">Retype password<input type="password" minLength={8} value={editConfirm} onChange={(event) => setEditConfirm(event.target.value)} className={`mt-1.5 ${inputClass}`} /></label>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 pt-4"><button type="button" onClick={() => setEditingUser(null)} className={secondaryButtonClass}>Cancel</button><button disabled={busy || Boolean(editPassword) !== Boolean(editConfirm) || editPassword !== editConfirm} className={primaryButtonClass}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Save changes</button></div>
+          </form>
+        </Modal>
       ) : null}
 
       {editingOrg ? (
-        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 p-4"><form onSubmit={saveOrganization} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"><div className="mb-5 flex items-center justify-between"><h3 className="text-xl font-black text-[#3d200a]">Organization settings</h3><button type="button" onClick={() => setEditingOrg(null)}><X className="h-5 w-5" /></button></div><input required value={editOrgName} onChange={(event) => setEditOrgName(event.target.value)} className="w-full rounded-xl border border-amber-500/25 px-3 py-2.5" /><label className="mt-4 flex items-center gap-3 text-sm font-semibold text-[#6f4827]"><input type="checkbox" checked={editOrgPublic} onChange={(event) => setEditOrgPublic(event.target.checked)} /> Public organization</label><label className="mt-3 flex items-center gap-3 text-sm font-semibold text-[#6f4827]"><input type="checkbox" checked={editOrgDiscoverable} onChange={(event) => setEditOrgDiscoverable(event.target.checked)} /> Discoverable in explorer</label><button disabled={busy} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#8B0000] px-4 py-3 font-bold text-white disabled:opacity-50">{busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />} Save settings</button></form></div>
+        <Modal title="Organization settings" onClose={() => !busy && setEditingOrg(null)}>
+          <form onSubmit={saveOrganization} className="space-y-4 p-5">
+            <label className="block text-sm font-medium text-slate-700">Organization name<input required value={editOrgName} onChange={(event) => setEditOrgName(event.target.value)} className={`mt-1.5 ${inputClass}`} /></label>
+            <label className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={editOrgPublic} onChange={(event) => setEditOrgPublic(event.target.checked)} className="h-4 w-4 accent-[#8B0000]" /> Public organization</label>
+            <label className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={editOrgDiscoverable} onChange={(event) => setEditOrgDiscoverable(event.target.checked)} className="h-4 w-4 accent-[#8B0000]" /> Discoverable in explorer</label>
+            <div className="flex justify-end gap-2 border-t border-slate-200 pt-4"><button type="button" onClick={() => setEditingOrg(null)} className={secondaryButtonClass}>Cancel</button><button disabled={busy} className={primaryButtonClass}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Save settings</button></div>
+          </form>
+        </Modal>
       ) : null}
 
-      {membersLoading ? <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/40"><Loader2 className="h-10 w-10 animate-spin text-white" /></div> : null}
+      {membersLoading ? <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/35"><Loader2 className="h-8 w-8 animate-spin text-white" /></div> : null}
       {memberPanel ? (
-        <div className="fixed inset-0 z-90 flex justify-end bg-black/45"><div className="h-full w-full max-w-2xl overflow-y-auto bg-[#fffcf5] p-6 shadow-2xl"><div className="flex items-start justify-between"><div><h3 className="text-2xl font-black text-[#3d200a]">{memberPanel.organization.name}</h3><p className="text-sm text-[#8a5d33]">Membership control</p></div><button onClick={() => setMemberPanel(null)} className="rounded-lg p-2 hover:bg-white"><X className="h-5 w-5" /></button></div><div className="my-6 rounded-xl border border-amber-500/20 bg-white p-4"><h4 className="font-bold text-[#3d200a]">Add existing account</h4><div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_180px_auto]"><select value={addUserId} onChange={(event) => setAddUserId(event.target.value)} className="rounded-lg border border-amber-500/25 px-3 py-2"><option value="">Select account</option>{availableUsers.map((user) => <option key={user.id} value={user.id}>{user.name} — {user.email}</option>)}</select><select value={addRole} onChange={(event) => setAddRole(event.target.value)} className="rounded-lg border border-amber-500/25 px-3 py-2">{roleOptions.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select><button onClick={addMember} disabled={!addUserId || busy} className="rounded-lg bg-[#8B0000] px-4 py-2 font-bold text-white disabled:opacity-50">Add</button></div></div><div className="space-y-3">{memberPanel.members.map((member) => { const protectedMember = member.roleId.toLowerCase() === "owner" || users.find((user) => user.id === member.userId)?.superAdmin; return <div key={member.id} className="rounded-xl border border-amber-500/20 bg-white p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-bold text-[#3d200a]">{member.userName}</p><p className="text-sm text-[#8a5d33]">{member.userEmail}</p></div><div className="flex gap-2"><select defaultValue={member.roleId} disabled={Boolean(protectedMember) || busy} onChange={(event) => updateMember(member, event.target.value)} className="rounded-lg border border-amber-500/25 px-3 py-2 text-sm disabled:bg-slate-100"><option value={member.roleId}>{member.roleName}</option>{roleOptions.filter((role) => role.id !== member.roleId).map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select><button disabled={Boolean(protectedMember) || busy} onClick={() => removeMember(member)} className="rounded-lg border border-red-200 p-2 text-red-700 hover:bg-red-50 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button></div></div></div>; })}</div><div className="mt-6 flex gap-2"><Link href={`/app/${memberPanel.organization.slug}/team`} className="rounded-lg bg-[#3d200a] px-4 py-2 font-bold text-white">Open team workspace</Link><Link href={`/app/${memberPanel.organization.slug}/roles`} className="rounded-lg border border-amber-500/25 bg-white px-4 py-2 font-bold text-[#6f4827]">Edit permissions</Link></div></div></div>
+        <div className="fixed inset-0 z-[90] flex justify-end bg-slate-950/45" onMouseDown={(event) => event.target === event.currentTarget && setMemberPanel(null)}>
+          <aside role="dialog" aria-modal="true" aria-label={`${memberPanel.organization.name} members`} className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white px-6 py-5"><div><h2 className="text-xl font-semibold text-slate-950">{memberPanel.organization.name}</h2><p className="mt-1 text-sm text-slate-500">Members and roles</p></div><button type="button" onClick={() => setMemberPanel(null)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button></div>
+            <div className="space-y-6 p-6">
+              <section className="rounded-xl border border-slate-200 p-4"><h3 className="font-semibold text-slate-950">Add member</h3><div className="mt-3 grid gap-2 sm:grid-cols-[1fr_170px_auto]"><select value={addUserId} onChange={(event) => setAddUserId(event.target.value)} className={inputClass}><option value="">Select account</option>{availableUsers.map((user) => <option key={user.id} value={user.id}>{user.name} — {user.email}</option>)}</select><select value={addRole} onChange={(event) => setAddRole(event.target.value)} className={inputClass}>{roleOptions.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select><button type="button" onClick={addMember} disabled={!addUserId || busy} className={primaryButtonClass}>Add</button></div></section>
+              <div className="divide-y divide-slate-200 rounded-xl border border-slate-200">{memberPanel.members.map((member) => { const protectedMember = member.roleId.toLowerCase() === "owner" || users.find((user) => user.id === member.userId)?.superAdmin; return <div key={member.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium text-slate-950">{member.userName}</p><p className="text-sm text-slate-500">{member.userEmail}</p></div><div className="flex gap-2"><select defaultValue={member.roleId} disabled={Boolean(protectedMember) || busy} onChange={(event) => updateMember(member, event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"><option value={member.roleId}>{member.roleName}</option>{roleOptions.filter((role) => role.id !== member.roleId).map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select><button type="button" disabled={Boolean(protectedMember) || busy} onClick={() => removeMember(member)} className="rounded-lg border border-slate-300 p-2 text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button></div></div>; })}</div>
+              <div className="flex flex-wrap gap-2"><Link href={`/app/${memberPanel.organization.slug}/team`} className={primaryButtonClass}>Open team workspace</Link><Link href={`/app/${memberPanel.organization.slug}/roles`} className={secondaryButtonClass}>Edit permissions</Link></div>
+            </div>
+          </aside>
+        </div>
       ) : null}
     </div>
   );

@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSession, signOut } from "@/lib/auth-client";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { Shield, ShieldCheck, LogOut, User, Mail, ChevronDown, Loader2, PencilLine } from "lucide-react";
+import { Shield, ShieldCheck, LogOut, ChevronDown, Loader2, PencilLine } from "lucide-react";
 import NavigationProgress from "@/components/ui/navigation-progress";
 import { ScanActivityProvider } from "@/components/scan-activity-provider";
 import { Toaster } from "sonner";
@@ -13,7 +13,6 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
@@ -186,7 +185,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               ) : (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#fdf1df] transition-all outline-none focus:ring-2 focus:ring-[#8B0000]/30">
+                    <button className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-slate-100 outline-none focus:ring-2 focus:ring-[#8B0000]/20">
                       <div className="w-9 h-9 rounded-full bg-[#8B0000] flex items-center justify-center text-white text-sm font-bold shadow-md shadow-[#8B0000]/20">
                         {initials}
                       </div>
@@ -194,55 +193,40 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         <span className="text-sm font-bold text-[#3d200a] leading-tight">{user?.name ?? "User"}</span>
                         <span className="text-xs text-[#8a5d33] leading-tight">{user?.email}</span>
                       </div>
-                      <ChevronDown className="w-4 h-4 text-[#8a5d33] hidden md:block" />
+                      <ChevronDown className="hidden h-4 w-4 text-slate-500 md:block" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-72">
-                    <DropdownMenuLabel>Account</DropdownMenuLabel>
-                    <div className="px-3 py-3">
+                  <DropdownMenuContent align="end" sideOffset={8} className="w-64 rounded-xl border-slate-200 p-1.5 shadow-xl shadow-slate-900/10">
+                    <div className="px-2.5 py-2.5">
                       <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-full bg-[#8B0000] flex items-center justify-center text-white text-base font-bold shadow-md shadow-[#8B0000]/20 shrink-0">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#8B0000] text-sm font-semibold text-white">
                           {initials}
                         </div>
-                        <div className="overflow-hidden">
-                          <p className="text-sm font-bold text-[#3d200a] truncate">{user?.name ?? "User"}</p>
-                          <p className="text-xs text-[#8a5d33] truncate">{user?.email}</p>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-950">{user?.name ?? "User"}</p>
+                          <p className="truncate text-xs text-slate-500">{user?.email}</p>
                         </div>
                       </div>
                     </div>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem className="gap-3">
-                      <User className="w-4 h-4 text-[#8a5d33]" />
-                      <div>
-                        <p className="text-xs text-[#8a5d33]">Full Name</p>
-                        <p className="font-semibold text-[#3d200a]">{user?.name ?? "—"}</p>
-                      </div>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="gap-3">
-                      <Mail className="w-4 h-4 text-[#8a5d33]" />
-                      <div>
-                        <p className="text-xs text-[#8a5d33]">Email</p>
-                        <p className="font-semibold text-[#3d200a]">{user?.email ?? "—"}</p>
-                      </div>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild className="gap-3 bg-[#8B0000] text-white focus:bg-[#730000] focus:text-white">
+                    <DropdownMenuItem asChild className="gap-3 text-slate-700 focus:bg-slate-100 focus:text-slate-950">
                       <Link href="/app/user-profile">
-                        <PencilLine className="w-4 h-4 text-white" />
-                        <span className="font-semibold text-white">Manage profile</span>
+                        <PencilLine className="h-4 w-4 text-slate-500" />
+                        <span>Manage profile</span>
                       </Link>
                     </DropdownMenuItem>
                     {superAdmin ? (
-                      <DropdownMenuItem asChild className="gap-3 bg-[#3d200a] text-white focus:bg-[#2c1707] focus:text-white">
+                      <DropdownMenuItem asChild className="gap-3 text-slate-700 focus:bg-slate-100 focus:text-slate-950">
                         <Link href="/app/admin">
-                          <ShieldCheck className="w-4 h-4 text-white" />
-                          <span className="font-semibold text-white">Super Admin Console</span>
+                          <ShieldCheck className="h-4 w-4 text-slate-500" />
+                          <span>Admin console</span>
                         </Link>
                       </DropdownMenuItem>
                     ) : null}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={handleLogout}
-                      className="gap-3 text-[#8B0000] focus:bg-[#8B0000]/5 focus:text-[#8B0000]"
+                      className="gap-3 text-red-700 focus:bg-red-50 focus:text-red-800"
                     >
                       <LogOut className="w-4 h-4" />
                       <span className="font-semibold">Log out</span>

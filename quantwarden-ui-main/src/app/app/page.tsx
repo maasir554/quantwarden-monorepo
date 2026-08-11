@@ -46,6 +46,7 @@ import {
   Clock,
   XCircle,
   CheckCircle2,
+  ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -55,6 +56,7 @@ export default function AppDashboard() {
   const [orgs, setOrgs] = useState<OrgData[]>([]);
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [orgsLoading, setOrgsLoading] = useState(true);
+  const [superAdmin, setSuperAdmin] = useState(false);
   const [joinSuccess, setJoinSuccess] = useState<string | null>(null);
   const router = useRouter();
 
@@ -79,6 +81,10 @@ export default function AppDashboard() {
     if (!isPending && sessionData?.session && !hasFetchedOrgs.current) {
       hasFetchedOrgs.current = true;
       fetchOrgs();
+      fetch("/api/admin/status", { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : { superAdmin: false })
+        .then((data) => setSuperAdmin(Boolean(data.superAdmin)))
+        .catch(() => setSuperAdmin(false));
     }
   }, [isPending, sessionData, fetchOrgs]);
 
@@ -399,24 +405,34 @@ export default function AppDashboard() {
 
       {/* Organizations Section */}
       <div>
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-extrabold text-[#3d200a] tracking-tight">Your Organizations</h2>
-          {orgList.length > 0 && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => { setShowJoinModal(true); setError(""); }}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-[#8B0000] bg-white/55 backdrop-blur-sm border border-white/60 rounded-xl hover:bg-white/70 transition-all shadow-sm"
+          <div className="flex flex-wrap items-center gap-2">
+            {superAdmin ? (
+              <Link
+                href="/app/admin"
+                className="flex items-center gap-1.5 rounded-xl border border-[#8B0000]/20 bg-white/80 px-4 py-2 text-sm font-bold text-[#8B0000] shadow-sm transition hover:bg-white"
               >
-                <Hash className="w-4 h-4" /> Join
-              </button>
-              <button
-                onClick={handleOpenCreateModal}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white bg-[#8B0000] rounded-xl hover:bg-[#730000] transition-all shadow-md shadow-[#8B0000]/20"
-              >
-                <Plus className="w-4 h-4" /> Create
-              </button>
-            </div>
-          )}
+                <ShieldCheck className="h-4 w-4" /> Admin console
+              </Link>
+            ) : null}
+            {orgList.length > 0 && (
+              <>
+                <button
+                  onClick={() => { setShowJoinModal(true); setError(""); }}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-[#8B0000] bg-white/55 backdrop-blur-sm border border-white/60 rounded-xl hover:bg-white/70 transition-all shadow-sm"
+                >
+                  <Hash className="w-4 h-4" /> Join
+                </button>
+                <button
+                  onClick={handleOpenCreateModal}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white bg-[#8B0000] rounded-xl hover:bg-[#730000] transition-all shadow-md shadow-[#8B0000]/20"
+                >
+                  <Plus className="w-4 h-4" /> Create
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {orgsLoading ? (
