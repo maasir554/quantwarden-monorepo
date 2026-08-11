@@ -18,13 +18,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
     }
 
-    // Verify caller is a member
-    const callerRows = await prisma.$queryRawUnsafe<{ role: string }[]>(
-      `SELECT role FROM "member" WHERE "organizationId" = $1 AND "userId" = $2 LIMIT 1`,
-      orgId,
-      session.user.id
-    );
-    if (callerRows.length === 0) {
+    // Verify caller is a member (configured super admins are attached lazily).
+    const callerAccess = await getOrgMemberAccess(orgId, session.user.id);
+    if (!callerAccess) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

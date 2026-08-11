@@ -7,6 +7,7 @@ import OrgDashboard from "./OrgDashboard";
 import PendingRequestView from "./PendingRequestView";
 import type { DashboardSection } from "./dashboard-sections";
 import { getSafeServerSession } from "@/lib/auth-session";
+import { ensureSuperAdminOrganizationMembership, isSuperAdminEmail } from "@/lib/super-admin";
 
 export async function renderOrganizationPage(orgSlug: string, activeSection: DashboardSection) {
   const session = await getSafeServerSession();
@@ -35,7 +36,7 @@ export async function renderOrganizationPage(orgSlug: string, activeSection: Das
 
   const orgBasic = orgBasicRows[0];
 
-  const memberRows = await prisma.$queryRawUnsafe<{
+  let memberRows = await prisma.$queryRawUnsafe<{
     id: string;
     role: string;
   }[]>(
@@ -43,6 +44,15 @@ export async function renderOrganizationPage(orgSlug: string, activeSection: Das
     orgBasic.id,
     session.user.id
   );
+
+  if (memberRows.length === 0 && isSuperAdminEmail(session.user.email)) {
+    await ensureSuperAdminOrganizationMembership(session.user.id, orgBasic.id);
+    memberRows = await prisma.$queryRawUnsafe<{ id: string; role: string }[]>(
+      `SELECT id, role FROM "member" WHERE "organizationId" = $1 AND "userId" = $2 LIMIT 1`,
+      orgBasic.id,
+      session.user.id
+    );
+  }
 
   if (memberRows.length === 0) {
     const requestRows = await prisma.$queryRawUnsafe<{

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { ensureSuperAdminOrganizationMembership, isSuperAdminEmail } from "@/lib/super-admin";
 
 export interface OrgMemberAccess {
   memberId: string;
@@ -40,7 +41,7 @@ function parsePermissions(raw: string | null) {
 }
 
 export async function getOrgMemberAccess(orgId: string, userId: string): Promise<OrgMemberAccess | null> {
-  const rows = await prisma.$queryRawUnsafe<MemberPermissionRow[]>(
+  let rows = await prisma.$queryRawUnsafe<MemberPermissionRow[]>(
     `SELECT
         m.id as "memberId",
         m.role as "roleId",
@@ -56,7 +57,28 @@ export async function getOrgMemberAccess(orgId: string, userId: string): Promise
     userId
   );
 
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (!isSuperAdminEmail(user?.email)) return null;
+
+    await ensureSuperAdminOrganizationMembership(userId, orgId);
+    rows = await prisma.$queryRawUnsafe<MemberPermissionRow[]>(
+      `SELECT
+          m.id as "memberId",
+          m.role as "roleId",
+          COALESCE(r.name, m.role) as "roleName",
+          r.permissions as permissions
+        FROM "member" m
+        LEFT JOIN "role" r
+          ON r."organizationId" = m."organizationId"
+         AND (r.id::text = m.role OR LOWER(r.name) = LOWER(m.role))
+        WHERE m."organizationId" = $1 AND m."userId" = $2
+        LIMIT 1`,
+      orgId,
+      userId
+    );
+    if (rows.length === 0) return null;
+  }
 
   const row = rows[0];
   const roleId = row.roleId?.toLowerCase?.() ?? "";

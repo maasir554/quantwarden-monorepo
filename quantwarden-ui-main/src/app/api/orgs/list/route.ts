@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+import { ensureSuperAdminMemberships, isSuperAdminEmail } from "@/lib/super-admin";
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,6 +16,9 @@ export async function GET(req: NextRequest) {
     }
 
     const userId = session.user.id;
+    if (isSuperAdminEmail(session.user.email)) {
+      await ensureSuperAdminMemberships(userId);
+    }
 
     // Fetch user's organizations with their role and member count in one query
     const orgs = await prisma.$queryRawUnsafe<

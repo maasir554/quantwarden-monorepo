@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSession, signOut } from "@/lib/auth-client";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { Shield, LogOut, User, Mail, ChevronDown, Loader2, PencilLine } from "lucide-react";
+import { Shield, ShieldCheck, LogOut, User, Mail, ChevronDown, Loader2, PencilLine } from "lucide-react";
 import NavigationProgress from "@/components/ui/navigation-progress";
 import { ScanActivityProvider } from "@/components/scan-activity-provider";
 import { Toaster } from "sonner";
@@ -28,6 +28,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { data: sessionData, isPending } = useSession();
   const [workspaceOrg, setWorkspaceOrg] = useState<ExplorerOrgNavItem | null>(null);
+  const [superAdmin, setSuperAdmin] = useState(false);
 
   const workspaceOrgSlug = useMemo(() => {
     if (!pathname) return null;
@@ -96,6 +97,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, [workspaceOrgSlug, sessionData?.session]);
+
+  useEffect(() => {
+    if (!sessionData?.session) {
+      setSuperAdmin(false);
+      return;
+    }
+
+    fetch("/api/admin/status", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : { superAdmin: false })
+      .then((data) => setSuperAdmin(Boolean(data.superAdmin)))
+      .catch(() => setSuperAdmin(false));
+  }, [sessionData?.session]);
 
   if (isPending || !sessionData?.session) {
     return (
@@ -218,6 +231,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         <span className="font-semibold text-white">Manage profile</span>
                       </Link>
                     </DropdownMenuItem>
+                    {superAdmin ? (
+                      <DropdownMenuItem asChild className="gap-3 bg-[#3d200a] text-white focus:bg-[#2c1707] focus:text-white">
+                        <Link href="/app/admin">
+                          <ShieldCheck className="w-4 h-4 text-white" />
+                          <span className="font-semibold text-white">Super Admin Console</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    ) : null}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={handleLogout}
