@@ -25,7 +25,6 @@ interface PendingRequest {
 }
 import {
   Shield,
-  ShieldCheck,
   Loader2,
   Building2,
   Plus,
@@ -665,29 +664,6 @@ export default function AppDashboard() {
           </div>
         </div>
       )}
-
-      {/* Quick Links */}
-      <div>
-        <h2 className="text-xl font-extrabold text-[#3d200a] mb-5 tracking-tight">Quick Actions</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          {[
-            { icon: <ShieldCheck className="w-6 h-6" />, title: "Safety Report", desc: "Review your encryption grading and PQC coverage.", color: "bg-emerald-700" },
-            { icon: <Shield className="w-6 h-6" />, title: "Documentation", desc: "Learn about CertIn-CBOM compliance requirements.", color: "bg-[#5f3512]" },
-            { icon: <Building2 className="w-6 h-6" />, title: "Team Settings", desc: "Manage roles, permissions, and team access.", color: "bg-amber-600" },
-          ].map((item, idx) => (
-            <div
-              key={idx}
-              className="group bg-white/58 backdrop-blur-md border border-white/60 rounded-2xl p-6 shadow-md shadow-amber-900/10 hover:shadow-lg hover:border-amber-200/80 hover:-translate-y-1 transition-all cursor-pointer"
-            >
-              <div className={`${item.color} w-12 h-12 rounded-xl flex items-center justify-center text-white mb-5 shadow-md group-hover:scale-110 transition-transform`}>
-                {item.icon}
-              </div>
-              <h3 className="text-base font-bold text-[#3d200a] mb-1.5">{item.title}</h3>
-              <p className="text-sm text-[#8a5d33] leading-relaxed">{item.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
 
       <div aria-hidden className="pointer-events-none select-none pt-8 pb-14 overflow-hidden">
         <p className="text-[clamp(2.5rem,17vw,8rem)] leading-none font-black tracking-tight text-center bg-linear-to-b from-white/95 to-white/20 bg-clip-text text-transparent">
