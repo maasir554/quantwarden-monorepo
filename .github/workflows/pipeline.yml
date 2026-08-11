@@ -153,12 +153,14 @@ jobs:
         run: |
           ssh -i "$HOME/.ssh/quantwarden_azure" "$AZURE_VM_USER@$AZURE_VM_HOST" \
             "cd /srv/quantwarden/app && \
+             docker image prune -af && \
              IMAGE_REGISTRY='$IMAGE_REGISTRY' IMAGE_TAG='$IMAGE_TAG' \
              docker compose -f docker-compose.yml -f docker-compose.production.yml \
              --profile production pull && \
              IMAGE_REGISTRY='$IMAGE_REGISTRY' IMAGE_TAG='$IMAGE_TAG' \
              docker compose -f docker-compose.yml -f docker-compose.production.yml \
-             --profile production up -d --no-build --remove-orphans"
+             --profile production up -d --no-build --remove-orphans && \
+             docker image prune -af"
       - name: Verify production
         shell: bash
         run: |
