@@ -2,47 +2,15 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { ShieldCheck, Info, Loader2, AlertTriangle, CheckCircle, Search, Server, X, Telescope } from "lucide-react";
-import { PqcAssessment } from "@/lib/pqc-scoring";
+import { ShieldCheck, Info, Loader2, AlertTriangle, Search, Server, Telescope } from "lucide-react";
 import { PqcMethodologyModal } from "./PqcMethodologyModal";
 import { FirstScanAnalysisNotice } from "./OnboardingScanStatus";
-
-function PqcGauge({ score }: { score: number }) {
-  const pointerAngle = Math.max(-90, Math.min(90, -90 + (score / 100) * 180));
-
-  return (
-    <div className="flex flex-col items-center justify-center transform hover:scale-105 transition-transform duration-500">
-      <div className="relative w-48 h-28">
-        <svg className="w-full h-full overflow-visible drop-shadow-sm" viewBox="0 0 200 110">
-          <path d="M 20 100 A 80 80 0 0 1 100 20" fill="none" stroke="#ef4444" strokeWidth="22" strokeLinecap="round" />
-          <path d="M 20 100 A 80 80 0 0 1 100 20" fill="none" stroke="#ef4444" strokeWidth="22" />
-          <path d="M 100 20 A 80 80 0 0 1 156.56 43.43" fill="none" stroke="#f59e0b" strokeWidth="22" />
-          <path d="M 156.56 43.43 A 80 80 0 0 1 176.08 75.27" fill="none" stroke="#3b82f6" strokeWidth="22" />
-          <path d="M 176.08 75.27 A 80 80 0 0 1 180 100" fill="none" stroke="#10b981" strokeWidth="22" strokeLinecap="round" />
-          <path d="M 176.08 75.27 A 80 80 0 0 1 180 100" fill="none" stroke="#10b981" strokeWidth="22" />
-
-          <g transform={`translate(100, 100) rotate(${pointerAngle})`}>
-            <path d="M -4 0 L 0 -72 L 4 0 Z" fill="#3d200a" className="drop-shadow-md" />
-            <circle cx="0" cy="0" r="8" fill="#3d200a" />
-            <circle cx="0" cy="0" r="3" fill="#ffffff" />
-          </g>
-        </svg>
-      </div>
-      <div className="mt-3 flex flex-col items-center select-none">
-        <span className="text-[2.5rem] font-black leading-none text-[#3d200a] text-shadow-sm">{score}</span>
-      </div>
-    </div>
-  );
-}
 
 interface PqcPostureProps {
   org: any;
 }
 
 export default function PqcPosture({ org }: PqcPostureProps) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,8 +18,6 @@ export default function PqcPosture({ org }: PqcPostureProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [tierFilter, setTierFilter] = useState("ALL");
   const [tierSortOrder, setTierSortOrder] = useState<"asc" | "desc" | null>(null);
-  const [infoTab, setInfoTab] = useState<"score" | "tier">("score");
-  const [showPqcInfoTooltip, setShowPqcInfoTooltip] = useState(false);
 
   useEffect(() => {
     const fetchPqcData = async () => {
@@ -108,10 +74,10 @@ export default function PqcPosture({ org }: PqcPostureProps) {
   const { organization, assets } = data;
   if (organization.totalPortsScored === 0 || data.initialScanPending) {
     return (
-      <div className="w-full max-w-6xl mx-auto space-y-6">
+      <div className="w-full space-y-5">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-black text-[#3d200a] flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[#3d200a] flex items-center gap-2">
               <ShieldCheck className="h-6 w-6 text-[#8B0000]" />
               Post-Quantum Cryptography (PQC) Posture
             </h1>
@@ -121,7 +87,7 @@ export default function PqcPosture({ org }: PqcPostureProps) {
           </div>
           <button
             onClick={() => setShowInfoModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-950 to-[#8B0000] rounded-full text-xs font-bold text-white hover:opacity-90 transition shadow-sm"
+            className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-[#8B0000]/40 hover:text-[#8B0000]"
           >
             <Info className="h-3.5 w-3.5" />
             Scoring Methodology
@@ -143,12 +109,29 @@ export default function PqcPosture({ org }: PqcPostureProps) {
     return b.tier.localeCompare(a.tier);
   });
 
+  const tierCounts = organization.tierCounts || {};
+  const tierTotal = (tierCounts.D || 0) + (tierCounts.C || 0) + (tierCounts.B || 0) + (tierCounts.A || 0);
+  const tierDistribution = [
+    { tier: "D", label: "High risk", count: tierCounts.D || 0, color: "bg-red-500", text: "text-red-700" },
+    { tier: "C", label: "Legacy", count: tierCounts.C || 0, color: "bg-amber-500", text: "text-amber-700" },
+    { tier: "B", label: "Transitional", count: tierCounts.B || 0, color: "bg-blue-500", text: "text-blue-700" },
+    { tier: "A", label: "Quantum-safe", count: tierCounts.A || 0, color: "bg-emerald-500", text: "text-emerald-700" },
+  ];
+
+  const organizationLabel =
+    organization.tier === "A"
+      ? "Quantum-safe"
+      : organization.tier === "B"
+        ? "Transitional"
+        : organization.tier === "C"
+          ? "Legacy"
+          : "Vulnerable";
+
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6">
-      {/* Header Section */}
+    <div className="w-full space-y-5">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-black text-[#3d200a] flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#3d200a] flex items-center gap-2">
             <ShieldCheck className="h-6 w-6 text-[#8B0000]" />
             Post-Quantum Cryptography (PQC) Posture
           </h1>
@@ -156,99 +139,63 @@ export default function PqcPosture({ org }: PqcPostureProps) {
         </div>
         <button
           onClick={() => setShowInfoModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-950 to-[#8B0000] rounded-full text-xs font-bold text-white hover:opacity-90 transition shadow-sm"
+          className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-[#8B0000]/40 hover:text-[#8B0000]"
         >
           <Info className="h-3.5 w-3.5" />
           Scoring Methodology
         </button>
       </div>
 
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
-        <div className="col-span-1 lg:col-span-2 bg-gradient-to-br from-white to-amber-50/50 backdrop-blur-sm rounded-2xl border border-amber-500/20 shadow-sm p-6 lg:p-8 flex items-center justify-between gap-8 flex-wrap lg:flex-nowrap">
-          <div className="flex-1">
-            <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#8a5d33]/60 mb-3">Organization Rating</h2>
-            <div className="flex items-baseline gap-3 mb-4">
-              <span className={`text-4xl font-black ${getTierColor(organization.tier).split(" ")[1]}`}>
-                Tier {organization.tier}
-              </span>
-              <span className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-full border ${getTierColor(organization.tier)}`}>
-                {organization.tier === "A" ? "Quantum-Safe" : organization.tier === "B" ? "Transitional" : organization.tier === "C" ? "Legacy" : "Vulnerable"}
-              </span>
-            </div>
-            <p className="text-xs text-[#8a5d33]/80 leading-relaxed max-w-md">
-              Based on the latest OpenSSL analysis across <strong className="text-[#3d200a]">{organization.totalPortsScored} active ports</strong>. High scores indicate strong symmetric encryption and ML-KEM key exchange implementation.
-            </p>
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-base font-semibold text-slate-900">Organization readiness</h2>
+            <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-bold ${getTierColor(organization.tier)}`}>
+              Tier {organization.tier} · {organizationLabel}
+            </span>
           </div>
-          <div className="shrink-0 flex justify-center w-full lg:w-auto">
-            <PqcGauge score={organization.averageScore} />
+          <div className="flex items-center gap-5 text-sm text-slate-600">
+            <span><strong className={`text-lg ${scoreColor(organization.averageScore)}`}>{organization.averageScore}</strong> / 100</span>
+            <span><strong className="text-slate-900">{organization.totalPortsScored}</strong> ports assessed</span>
           </div>
         </div>
 
-        {/* Risk Overview Matrix */}
-        {organization.tierCounts && (
-          <div className="col-span-1 lg:col-span-2 rounded-2xl border border-amber-500/20 bg-white/70 backdrop-blur-sm p-5 lg:p-6 relative overflow-hidden flex flex-col">
-            <div className="relative z-10">
-              <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#8a5d33]/60 mb-4">Risk Overview Matrix</h3>
-              <div className="grid grid-cols-4 grid-rows-4 gap-1.5 mb-4">
-                {(function() {
-                  const counts = organization.tierCounts;
-                  const total = (counts.D || 0) + (counts.C || 0) + (counts.B || 0) + (counts.A || 0);
-                  if (total === 0) return null;
-                  
-                  // Normalize counts to 16 cells proportionally
-                  const d = Math.round(((counts.D || 0) / total) * 16);
-                  const c = Math.round(((counts.C || 0) / total) * 16);
-                  const b = Math.round(((counts.B || 0) / total) * 16);
-                  const a = 16 - d - c - b;
-                  
-                  const cells = [];
-                  let cellIndex = 0;
-                  
-                  for (let i = 0; i < d && cellIndex < 16; i++, cellIndex++) {
-                    cells.push(<button key={`d-${i}`} onClick={() => setTierFilter(tierFilter === 'D' ? 'ALL' : 'D')} className="h-6 sm:h-8 rounded-sm bg-red-500 transition-transform hover:scale-110 hover:ring-2 hover:ring-white/50" />);
-                  }
-                  for (let i = 0; i < c && cellIndex < 16; i++, cellIndex++) {
-                    cells.push(<button key={`c-${i}`} onClick={() => setTierFilter(tierFilter === 'C' ? 'ALL' : 'C')} className="h-6 sm:h-8 rounded-sm bg-amber-500 transition-transform hover:scale-110 hover:ring-2 hover:ring-white/50" />);
-                  }
-                  for (let i = 0; i < b && cellIndex < 16; i++, cellIndex++) {
-                    cells.push(<button key={`b-${i}`} onClick={() => setTierFilter(tierFilter === 'B' ? 'ALL' : 'B')} className="h-6 sm:h-8 rounded-sm bg-blue-500 transition-transform hover:scale-110 hover:ring-2 hover:ring-white/50" />);
-                  }
-                  for (let i = 0; i < a && cellIndex < 16; i++, cellIndex++) {
-                    cells.push(<button key={`a-${i}`} onClick={() => setTierFilter(tierFilter === 'A' ? 'ALL' : 'A')} className="h-6 sm:h-8 rounded-sm bg-emerald-500 transition-transform hover:scale-110 hover:ring-2 hover:ring-white/50" />);
-                  }
-                  
-                  while (cells.length < 16) {
-                    cells.push(<div key={`empty-${cells.length}`} className="h-6 sm:h-8 rounded-sm bg-[#8a5d33]/10" />);
-                  }
-                  
-                  return cells;
-                })()}
-              </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-2 text-[10px] font-bold text-[#3d200a]">
-                <button onClick={() => setTierFilter(tierFilter === 'D' ? 'ALL' : 'D')} className={`flex items-center gap-1.5 hover:underline ${tierFilter === 'D' ? 'text-red-600 underline' : ''}`}>
-                  <span className="h-2 w-2 rounded bg-red-500" /> High {organization.tierCounts.D || 0} ({Math.round(((organization.tierCounts.D || 0) / ((organization.tierCounts.D||0)+(organization.tierCounts.C||0)+(organization.tierCounts.B||0)+(organization.tierCounts.A||0))) * 100) || 0}%)
+        {tierTotal > 0 ? (
+          <div className="border-t border-slate-200 px-5 py-4">
+            <div className="flex h-2 overflow-hidden rounded-full bg-slate-100">
+              {tierDistribution.filter((item) => item.count > 0).map((item) => (
+                <button
+                  key={item.tier}
+                  type="button"
+                  title={`${item.label}: ${item.count}`}
+                  aria-label={`Filter ${item.label} assets`}
+                  onClick={() => setTierFilter(tierFilter === item.tier ? "ALL" : item.tier)}
+                  className={`${item.color} transition-opacity hover:opacity-80`}
+                  style={{ width: `${(item.count / tierTotal) * 100}%` }}
+                />
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
+              {tierDistribution.map((item) => (
+                <button
+                  key={item.tier}
+                  type="button"
+                  onClick={() => setTierFilter(tierFilter === item.tier ? "ALL" : item.tier)}
+                  className={`flex items-center gap-2 text-xs font-medium transition hover:text-slate-900 ${tierFilter === item.tier ? item.text : "text-slate-600"}`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${item.color}`} />
+                  {item.label} {item.count} ({Math.round((item.count / tierTotal) * 100)}%)
                 </button>
-                <button onClick={() => setTierFilter(tierFilter === 'C' ? 'ALL' : 'C')} className={`flex items-center gap-1.5 hover:underline ${tierFilter === 'C' ? 'text-amber-600 underline' : ''}`}>
-                  <span className="h-2 w-2 rounded bg-amber-500" /> Medium {organization.tierCounts.C || 0} ({Math.round(((organization.tierCounts.C || 0) / ((organization.tierCounts.D||0)+(organization.tierCounts.C||0)+(organization.tierCounts.B||0)+(organization.tierCounts.A||0))) * 100) || 0}%)
-                </button>
-                <button onClick={() => setTierFilter(tierFilter === 'B' ? 'ALL' : 'B')} className={`flex items-center gap-1.5 hover:underline ${tierFilter === 'B' ? 'text-blue-600 underline' : ''}`}>
-                  <span className="h-2 w-2 rounded bg-blue-500" /> Safe {organization.tierCounts.B || 0} ({Math.round(((organization.tierCounts.B || 0) / ((organization.tierCounts.D||0)+(organization.tierCounts.C||0)+(organization.tierCounts.B||0)+(organization.tierCounts.A||0))) * 100) || 0}%)
-                </button>
-                <button onClick={() => setTierFilter(tierFilter === 'A' ? 'ALL' : 'A')} className={`flex items-center gap-1.5 hover:underline ${tierFilter === 'A' ? 'text-emerald-600 underline' : ''}`}>
-                  <span className="h-2 w-2 rounded bg-emerald-500" /> Quantum {organization.tierCounts.A || 0} ({Math.round(((organization.tierCounts.A || 0) / ((organization.tierCounts.D||0)+(organization.tierCounts.C||0)+(organization.tierCounts.B||0)+(organization.tierCounts.A||0))) * 100) || 0}%)
-                </button>
-              </div>
+              ))}
             </div>
           </div>
-        )}
-      </div>
+        ) : null}
+      </section>
 
-      {/* Asset Table */}
-      <div className="bg-white/70 backdrop-blur-sm rounded-2xl border border-gray-100/50 shadow-sm overflow-hidden flex flex-col">
-        <div className="p-4 sm:p-5 border-b border-amber-500/20 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <h2 className="font-black text-[#3d200a] flex items-center gap-2">
-            <Server className="h-4 w-4 text-[#8a5d33]" />
+      <div className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col items-center justify-between gap-4 border-b border-slate-200 p-4 sm:flex-row sm:p-5">
+          <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+            <Server className="h-4 w-4 text-[#8B0000]" />
             Asset PQC Rollup
           </h2>
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
@@ -259,13 +206,13 @@ export default function PqcPosture({ org }: PqcPostureProps) {
                 placeholder="Search assets..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-amber-50/50 border border-amber-500/20 rounded-lg text-xs font-semibold text-[#3d200a] placeholder-[#8a5d33]/50 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/20 focus:border-[#8B0000] transition-all"
+                className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-4 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-[#8B0000] focus:outline-none focus:ring-2 focus:ring-[#8B0000]/10"
               />
             </div>
             <select
               value={tierFilter}
               onChange={(e) => setTierFilter(e.target.value)}
-              className="w-full sm:w-auto pl-4 pr-10 py-2 bg-amber-50/50 border border-amber-500/20 rounded-lg text-xs font-bold text-[#3d200a] outline-none focus:ring-2 focus:ring-[#8B0000]/20 focus:border-[#8B0000] appearance-none cursor-pointer hover:bg-amber-50 transition-colors"
+              className="w-full cursor-pointer appearance-none rounded-lg border border-slate-300 bg-white py-2 pl-4 pr-10 text-xs font-semibold text-slate-800 outline-none focus:border-[#8B0000] focus:ring-2 focus:ring-[#8B0000]/10 sm:w-auto"
               style={{ backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a5d33' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1em 1em' }}
             >
               <option value="ALL">All Tiers</option>
@@ -276,7 +223,7 @@ export default function PqcPosture({ org }: PqcPostureProps) {
               <option value="F">Tier F</option>
             </select>
             {tierFilter !== 'ALL' && (
-              <Link href={`/app/${org.slug}/explore?pqcTier=${tierFilter}`} className="inline-flex items-center justify-center rounded-full bg-amber-100 border border-amber-500/30 text-amber-700 hover:bg-amber-200 transition-colors">
+              <Link href={`/app/${org.slug}/explore?pqcTier=${tierFilter}`} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-[#8B0000] transition hover:bg-slate-50">
                 <Telescope className="h-4 w-4" />
               </Link>
             )}
@@ -291,7 +238,7 @@ export default function PqcPosture({ org }: PqcPostureProps) {
           <div className="overflow-x-auto max-h-[600px] overflow-y-auto relative rounded-b-2xl">
             <table className="w-full text-left border-collapse">
               <thead className="sticky top-0 z-20">
-                <tr className="bg-gradient-to-r from-amber-50 to-white border-b border-amber-500/20">
+                <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="py-3.5 px-5 text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/70">Asset</th>
                   <th className="py-3.5 px-5 text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/70 text-center">Score</th>
                   <th onClick={() => setTierSortOrder(prev => prev === "asc" ? "desc" : prev === "desc" ? null : "asc")} className="py-3.5 px-5 text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/70 cursor-pointer hover:bg-amber-50/50 transition-colors group select-none">
@@ -316,14 +263,14 @@ export default function PqcPosture({ org }: PqcPostureProps) {
                   <th className="py-3.5 px-5 text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/70">Encryption</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-amber-500/10">
+              <tbody className="divide-y divide-slate-200">
                 {filteredAssets.map((asset: any) => {
                   // Grab primary breakdown from the best/first port
                   const summary = asset.ports[0]?.breakdown;
                   const assetUrl = `/app/${org.slug}/asset/${asset.id}`;
                   
                   return (
-                    <tr key={asset.id} className="hover:bg-amber-50/40 transition-colors group cursor-pointer" onClick={() => window.location.href = assetUrl}>
+                    <tr key={asset.id} className="group cursor-pointer transition-colors hover:bg-slate-50" onClick={() => window.location.href = assetUrl}>
                       <td className="py-3.5 px-5">
                         <div className="font-bold text-[#3d200a] group-hover:text-[#8B0000] group-hover:underline transition-colors">{asset.value}</div>
                         <div className="text-[10px] text-[#8a5d33]/60 mt-0.5">{asset.ports.length} port{asset.ports.length > 1 ? 's' : ''} assessed</div>

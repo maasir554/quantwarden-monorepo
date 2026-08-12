@@ -6,18 +6,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
-  Boxes,
   Calendar,
-  CheckCircle2,
   ChevronRight,
   Fingerprint,
   Info,
   KeyRound,
   Loader2,
   Lock,
-  ShieldAlert,
   ShieldCheck,
-  Sparkles,
   Telescope,
 } from "lucide-react";
 import {
@@ -676,11 +672,11 @@ function OverviewBarChart({
 
 function TlsVersionPostureChart({ data }: { data: CountDatum[] }) {
   const total = data.reduce((sum, entry) => sum + entry.value, 0);
-  const visualConfig: Record<string, { color: string; surface: string; label: string }> = {
-    "TLS 1.2 only": { color: "#d97706", surface: "border-amber-200 bg-amber-50", label: "Low" },
-    "TLS 1.2 + 1.3": { color: "#2563eb", surface: "border-blue-200 bg-blue-50", label: "Better" },
-    "TLS 1.3 only": { color: "#059669", surface: "border-emerald-200 bg-emerald-50", label: "Best" },
-    "Legacy / other": { color: "#dc2626", surface: "border-red-200 bg-red-50", label: "Action needed" },
+  const visualConfig: Record<string, { color: string; label: string }> = {
+    "TLS 1.2 only": { color: "#d97706", label: "Legacy" },
+    "TLS 1.2 + 1.3": { color: "#2563eb", label: "Compatible" },
+    "TLS 1.3 only": { color: "#059669", label: "Preferred" },
+    "Legacy / other": { color: "#dc2626", label: "Action needed" },
   };
 
   if (total === 0) {
@@ -692,8 +688,8 @@ function TlsVersionPostureChart({ data }: { data: CountDatum[] }) {
   }
 
   return (
-    <div className="flex flex-1 flex-col justify-center gap-4">
-      <div className="flex h-4 overflow-hidden rounded-full bg-stone-100" aria-label={`${total} scanned TLS endpoints`}>
+    <div className="flex flex-1 flex-col gap-4">
+      <div className="flex h-2 overflow-hidden rounded-full bg-slate-100" aria-label={`${total} scanned TLS endpoints`}>
         {data.filter((entry) => entry.value > 0).map((entry) => (
           <div
             key={entry.name}
@@ -705,24 +701,25 @@ function TlsVersionPostureChart({ data }: { data: CountDatum[] }) {
           />
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="divide-y divide-slate-200 border-y border-slate-200">
         {data.map((entry) => {
           const config = visualConfig[entry.name] || visualConfig["Legacy / other"];
           return (
-            <div key={entry.name} className={`rounded-xl border px-3 py-2.5 ${config.surface}`}>
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-extrabold text-[#3d200a]">{entry.name}</span>
-                <span className="text-sm font-black text-[#3d200a]">{entry.value}</span>
+            <div key={entry.name} className="flex items-center justify-between gap-4 py-2.5">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: config.color }} />
+                <span className="truncate text-xs font-semibold text-slate-800">{entry.name}</span>
+                <span className="text-[11px] text-slate-500">{config.label}</span>
               </div>
-              <div className="mt-1 flex items-center justify-between gap-2 text-[10px] font-bold">
-                <span style={{ color: config.color }}>{config.label}</span>
-                <span className="text-[#8a5d33]/65">{formatPercent(entry.value, total)}</span>
+              <div className="flex shrink-0 items-center gap-3 text-xs">
+                <span className="font-semibold text-slate-900">{entry.value}</span>
+                <span className="w-9 text-right text-slate-500">{formatPercent(entry.value, total)}</span>
               </div>
             </div>
           );
         })}
       </div>
-      <p className="text-[11px] font-semibold leading-relaxed text-[#8a5d33]/70">
+      <p className="text-[11px] leading-relaxed text-slate-500">
         Each endpoint is classified by its complete supported TLS version set, rather than only its highest version.
       </p>
     </div>
@@ -742,57 +739,38 @@ function TopCertificateCommonNamesCard({
     );
   }
 
-  const maxInstances = Math.max(...rows.map((row) => row.instances), 1);
-  const maxUniqueAssets = Math.max(...rows.map((row) => row.uniqueAssets), 1);
-
   return (
-    <div className="overflow-hidden rounded-2xl border border-amber-500/15 bg-white/55">
-      <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(200px,1fr)_minmax(200px,1fr)] border-b border-amber-500/10 bg-amber-50/50 text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/60">
+    <div className="overflow-x-auto rounded-lg border border-slate-200">
+      <div className="grid min-w-[680px] grid-cols-[minmax(0,1.5fr)_minmax(140px,0.6fr)_minmax(140px,0.6fr)] border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
         <div className="px-4 py-3">Certificate</div>
         <div className="px-4 py-3 text-center">Instances</div>
         <div className="px-4 py-3 text-center">Assets</div>
       </div>
 
-      <div className="divide-y divide-amber-500/8">
+      <div className="min-w-[680px] divide-y divide-slate-200 bg-white">
         {rows.map((row) => (
           <div
             key={row.name}
-            className="grid grid-cols-[minmax(0,1.5fr)_minmax(200px,1fr)_minmax(200px,1fr)] items-center gap-0"
+            className="grid grid-cols-[minmax(0,1.5fr)_minmax(140px,0.6fr)_minmax(140px,0.6fr)] items-center gap-0 hover:bg-slate-50"
           >
             <div className="px-4 py-3">
-              <p className="truncate text-sm font-bold text-[#3d200a]" title={row.name}>
+              <p className="truncate text-sm font-semibold text-slate-900" title={row.name}>
                 {row.name}
               </p>
               <p
-                className="mt-1 truncate text-[9px] font-semibold uppercase tracking-[0.1em] text-[#8a5d33]/55"
+                className="mt-1 truncate text-[11px] text-slate-500"
                 title={`${row.issuerName} • ${row.serialNumber}`}
               >
                 {row.issuerName} • {row.serialNumber}
               </p>
             </div>
 
-            <div className="px-4 py-3">
-              <div className="flex items-center gap-3">
-                <div className="h-6 flex-1 overflow-hidden bg-amber-100">
-                  <div
-                    className="h-full bg-gradient-to-r from-amber-500 to-amber-600"
-                    style={{ width: `${(row.instances / maxInstances) * 100}%` }}
-                  />
-                </div>
-                <span className="w-8 text-right text-sm font-black text-[#3d200a]">{row.instances}</span>
-              </div>
+            <div className="px-4 py-3 text-center text-sm font-semibold text-slate-900">
+              {row.instances}
             </div>
 
-            <div className="px-4 py-3">
-              <div className="flex items-center gap-3">
-                <div className="h-6 flex-1 overflow-hidden bg-emerald-100">
-                  <div
-                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600"
-                    style={{ width: `${(row.uniqueAssets / maxUniqueAssets) * 100}%` }}
-                  />
-                </div>
-                <span className="w-8 text-right text-sm font-black text-[#3d200a]">{row.uniqueAssets}</span>
-              </div>
+            <div className="px-4 py-3 text-center text-sm font-semibold text-slate-900">
+              {row.uniqueAssets}
             </div>
           </div>
         ))}
@@ -867,12 +845,12 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
   if (data.totalScanned === 0 || data.initialScanPending) {
     return (
       <div className="flex flex-col space-y-5 pb-10 animate-in fade-in duration-300">
-        <div className="rounded-3xl border border-white/40 bg-white/40 p-5 shadow-sm ring-1 ring-amber-500/10 backdrop-blur-xl">
+        <header>
           <h1 className="text-2xl font-bold tracking-tight text-[#3d200a]">Security Overview</h1>
           <p className="mt-1 text-sm font-semibold text-[#8a5d33]/70">
             Real-time intelligence from completed discovery and OpenSSL endpoint scans.
           </p>
-        </div>
+        </header>
         <FirstScanAnalysisNotice orgId={org.id} orgSlug={org.slug} area="overview" />
       </div>
     );
@@ -890,172 +868,66 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       : immediateAttentionTab === "cert"
         ? `/app/${org.slug}/explore?certState=expired_or_invalid`
         : `/app/${org.slug}/explore?tlsProfile=legacy_or_missing`;
-  const kyberHref =
-    kyberTab === "supported"
-      ? `/app/${org.slug}/explore?pqcSupported=true`
-      : `/app/${org.slug}/explore?pqcNegotiated=true`;
-
   return (
     <TooltipProvider>
       <div className="flex flex-col space-y-5 pb-10 animate-in fade-in duration-300">
-      <div className="rounded-3xl border border-white/40 bg-white/40 p-5 shadow-sm ring-1 ring-amber-500/10 backdrop-blur-xl">
+      <header>
         <h1 className="text-2xl font-bold tracking-tight text-[#3d200a]">Security Overview</h1>
-        <p className="mt-1 text-sm font-semibold text-[#8a5d33]/70">
+        <p className="mt-1 text-sm text-slate-600">
           Real-time intelligence from the latest OpenSSL endpoint scans across your organization.
         </p>
-      </div>
-
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          {
-            title: "Scanned TLS Endpoints",
-            value: data.totalScanned,
-            icon: Boxes,
-            tone: "text-blue-700",
-            bg: "from-blue-100 to-white",
-            borderColor: "border-blue-200",
-          },
-          {
-            title: "Strong Ciphers Confirmed",
-            value: data.strongCipherCount,
-            icon: ShieldAlert,
-            tone: "text-emerald-700",
-            bg: "from-emerald-100 to-white",
-            borderColor: "border-emerald-200",
-          },
-          {
-            title: "Certificates Expiring (<30d)",
-            value: data.closeDeadlineCerts,
-            icon: Calendar,
-            tone: "text-amber-700",
-            bg: "from-amber-100 to-white",
-            borderColor: "border-amber-200",
-            href: `/app/${org.slug}/explore?certState=expiring_soon`,
-          },
-          {
-            title: "Critical Expirations",
-            value: data.expiredCerts,
-            icon: AlertTriangle,
-            tone: "text-red-700",
-            bg: "from-red-100 to-white",
-            borderColor: "border-red-200",
-          },
-        ].map((metric) => {
-          const Icon = metric.icon;
-          return (
-            <article
-              key={metric.title}
-              className={`rounded-3xl border ${metric.borderColor} bg-white/70 p-5 shadow-sm backdrop-blur`}
-            >
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-xs font-bold uppercase tracking-widest text-[#8a5d33]/70">{metric.title}</p>
-                <div
-                  className={`rounded-xl border ${metric.borderColor} bg-linear-to-br ${metric.bg} p-2 shadow-sm ${metric.tone}`}
-                >
-                  <Icon className="h-4.5 w-4.5" />
-                </div>
-              </div>
-              <p className={`mt-4 text-3xl font-bold tracking-tight ${metric.tone}`}>{metric.value}</p>
-              {metric.href ? (
-                <div className="mt-3 flex justify-end">
-                  <Link
-                    href={metric.href}
-                    className="text-xs font-bold text-[#8B0000] underline decoration-[#8B0000]/45 underline-offset-3 transition-colors hover:text-[#730000] hover:decoration-[#730000]"
-                  >
-                    Show
-                  </Link>
-                </div>
-              ) : null}
-            </article>
-          );
-        })}
-      </section>
+      </header>
 
       <section className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-3">
-        <article className="flex h-full min-h-[14.5rem] flex-col rounded-3xl border border-amber-500/20 bg-white/60 p-6 shadow-sm backdrop-blur">
-          <div className="mb-2 flex items-center gap-2">
-            <Lock className="h-5 w-5 text-blue-600" />
-            <h2 className="text-base font-bold text-[#3d200a]">TLS Version Posture</h2>
+        <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-2 border-b border-slate-200 pb-3">
+            <Lock className="h-4 w-4 text-[#8B0000]" />
+            <h2 className="text-sm font-semibold text-slate-900">TLS Version Posture</h2>
           </div>
           <TlsVersionPostureChart data={data.tlsChartData || []} />
         </article>
 
-        <article className="flex h-full min-h-[14.5rem] flex-col rounded-3xl border border-amber-500/20 bg-white/60 p-6 shadow-sm backdrop-blur">
-          <div className="mb-2 flex items-center justify-between gap-2">
+        <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-2 border-b border-slate-200 pb-3">
             <div className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-indigo-600" />
-              <h2 className="text-base font-bold text-[#3d200a]">PQC Rating</h2>
+              <Activity className="h-4 w-4 text-[#8B0000]" />
+              <h2 className="text-sm font-semibold text-slate-900">PQC Rating</h2>
             </div>
             <Link
               href={`/app/${org.slug}/pqc`}
-              className="text-[10px] font-bold text-[#8B0000] hover:underline"
+              className="text-xs font-semibold text-[#8B0000] hover:underline"
             >
               View Posture
             </Link>
           </div>
-          <div className={`mb-6 flex items-center justify-between rounded-2xl border px-6 py-5 ${data.tier.bg}`}>
-            <div className="flex items-center gap-4">
-              <div className={`flex h-14 w-14 items-center justify-center rounded-full bg-white text-3xl font-bold shadow-sm ring-4 ring-white/50 ${data.tier.color}`}>
-                {data.tier.grade}
+          <div className="flex items-center justify-between gap-4 py-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex rounded-md border px-2.5 py-1 text-sm font-bold ${data.tier.bg} ${data.tier.color}`}>
+                  {data.tier.grade}
+                </span>
+                <span className="text-sm font-semibold text-slate-900">{data.tier.tier}</span>
               </div>
-              <div>
-                <p className="text-sm font-bold tracking-tight text-[#3d200a]">{data.tier.tier}</p>
-                <p className={`text-base font-bold ${data.tier.color}`}>{data.tier.label}</p>
-              </div>
+              <p className="mt-2 text-xs text-slate-500">{data.tier.label}</p>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-black text-[#3d200a]">{data.tier.score ?? 0}</p>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/60">out of 100</p>
+              <p className="text-xl font-bold text-slate-900">{data.tier.score ?? 0}<span className="text-xs font-medium text-slate-500"> / 100</span></p>
+              <p className="mt-1 text-xs text-slate-500">{data.tier.portsScored} ports scored</p>
             </div>
           </div>
-
-          <div className="mt-auto space-y-3">
-            <div className="flex items-center justify-between rounded-xl border border-amber-500/10 bg-amber-500/5 px-4 py-3">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="h-4.5 w-4.5 text-amber-600" />
-                <p className="text-xs font-bold text-[#3d200a]">Self-Signed Certificates</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <p className={`text-sm font-bold ${data.selfSignedCount > 0 ? "text-amber-600" : "text-emerald-600"}`}>
-                  {data.selfSignedCount}
-                </p>
-                <UiTooltip>
-                  <TooltipTrigger asChild>
-                    <Link
-                      href={`/app/${org.slug}/explore?selfSigned=true`}
-                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#f6c338] to-[#e0a100] text-[#5b3416] shadow-sm transition hover:from-[#efb80d] hover:to-[#c88c00]"
-                    >
-                      <Telescope className="h-2.5 w-2.5" />
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="left" className="text-[11px] font-semibold">
-                    Open self-signed certificate assets in Asset Explorer
-                  </TooltipContent>
-                </UiTooltip>
-              </div>
-            </div>
-            {data.tier.portsScored > 0 && (
-              <div className="flex items-center justify-between rounded-xl border border-amber-500/10 bg-amber-500/5 px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <ShieldCheck className="h-4.5 w-4.5 text-emerald-600" />
-                  <p className="text-xs font-bold text-[#3d200a]">Ports Scored</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-bold text-emerald-600">
-                    {data.tier.portsScored}
-                  </p>
-                </div>
-              </div>
-            )}
+          <div className="mt-auto flex items-center justify-between border-t border-slate-200 pt-3 text-xs">
+            <span className="text-slate-600">Self-signed certificates</span>
+            <Link href={`/app/${org.slug}/explore?selfSigned=true`} className={`font-semibold hover:underline ${data.selfSignedCount > 0 ? "text-amber-700" : "text-emerald-700"}`}>
+              {data.selfSignedCount}
+            </Link>
           </div>
-
         </article>
 
-        <article className="flex h-full min-h-[14.5rem] flex-col rounded-[1.9rem] border border-amber-500/20 bg-white/60 p-5 shadow-sm backdrop-blur">
-            <div className="mb-4 flex items-center justify-between gap-4">
+        <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-4 border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2">
-                <KeyRound className="h-5 w-5 text-emerald-600" />
-                <h2 className="text-base font-bold text-[#3d200a]">PQC Safe Key Exchange</h2>
+                <KeyRound className="h-4 w-4 text-[#8B0000]" />
+                <h2 className="text-sm font-semibold text-slate-900">PQC Safe Key Exchange</h2>
                 <UiTooltip>
                   <TooltipTrigger asChild>
                     <button
@@ -1109,7 +981,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <article className="rounded-3xl border border-amber-500/20 bg-white/60 p-6 shadow-sm backdrop-blur">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-emerald-600" />
@@ -1124,7 +996,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
               </TabButton>
             </div>
           </div>
-          <p className="mb-5 text-[11px] font-bold uppercase tracking-widest text-[#8a5d33]/70">
+          <p className="mb-5 text-xs text-slate-500">
             Version-specific TLS 1.3 cipher posture
           </p>
           <RankedTable
@@ -1138,7 +1010,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
           />
         </article>
 
-        <article className="rounded-3xl border border-amber-500/20 bg-white/60 p-6 shadow-sm backdrop-blur">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-blue-600" />
@@ -1153,7 +1025,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
               </TabButton>
             </div>
           </div>
-          <p className="mb-5 text-[11px] font-bold uppercase tracking-widest text-[#8a5d33]/70">
+          <p className="mb-5 text-xs text-slate-500">
             Version-specific TLS 1.2 cipher posture
           </p>
           <RankedTable
@@ -1169,7 +1041,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <article className="rounded-3xl border border-red-500/15 bg-white/60 p-6 shadow-sm backdrop-blur">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="flex items-start gap-2">
               <AlertTriangle className="h-5 w-5 text-red-600" />
@@ -1241,12 +1113,12 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
           </Link>
         </article>
 
-        <article className="rounded-3xl border border-amber-500/20 bg-white/60 p-6 shadow-sm backdrop-blur">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-indigo-600" />
             <h2 className="text-base font-bold text-[#3d200a]">Certificate Key Size</h2>
           </div>
-          <p className="mb-5 text-[11px] font-bold uppercase tracking-widest text-[#8a5d33]/70">
+          <p className="mb-5 text-xs text-slate-500">
             Public key size distribution from current endpoint certificates
           </p>
           <KeySizeDonutCard
@@ -1259,12 +1131,12 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       </section>
 
       <section>
-        <article className="rounded-3xl border border-amber-500/20 bg-white/60 p-6 shadow-sm backdrop-blur">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 flex items-center gap-2">
             <Fingerprint className="h-5 w-5 text-[#8B0000]" />
             <h2 className="text-base font-bold text-[#3d200a]">Certificate Signature Algorithms</h2>
           </div>
-          <p className="mb-5 text-[11px] font-bold uppercase tracking-widest text-[#8a5d33]/70">
+          <p className="mb-5 text-xs text-slate-500">
             Observed signing algorithms from endpoint certificates
           </p>
           <RankedTable
@@ -1276,12 +1148,12 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       </section>
 
       <section>
-        <article className="rounded-3xl border border-amber-500/20 bg-white/60 p-6 shadow-sm backdrop-blur">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-violet-600" />
             <h2 className="text-base font-bold text-[#3d200a]">TLSv1.3 Key Exchange</h2>
           </div>
-          <p className="mb-5 text-[11px] font-bold uppercase tracking-widest text-[#8a5d33]/70">
+          <p className="mb-5 text-xs text-slate-500">
             Supported key exchange groups across TLSv1.3 endpoints
           </p>
 
@@ -1362,12 +1234,12 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <article className="rounded-3xl border border-amber-500/20 bg-white/60 p-6 shadow-sm backdrop-blur">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 flex items-center gap-2">
-            <Fingerprint className="h-5 w-5 text-sky-600" />
+            <Fingerprint className="h-5 w-5 text-[#8B0000]" />
             <h2 className="text-base font-bold text-[#3d200a]">Certificate Instances by Port</h2>
           </div>
-          <p className="mb-5 text-[11px] font-bold uppercase tracking-widest text-[#8a5d33]/70">
+          <p className="mb-5 text-xs text-slate-500">
             Distribution of observed endpoint certificates across active TLS ports
           </p>
           <BreakdownDonutCard
@@ -1379,12 +1251,12 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
           />
         </article>
 
-        <article className="rounded-3xl border border-amber-500/20 bg-white/60 p-6 shadow-sm backdrop-blur">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 flex items-center gap-2">
             <Fingerprint className="h-5 w-5 text-[#8B0000]" />
             <h2 className="text-base font-bold text-[#3d200a]">Certificates by Algorithm</h2>
           </div>
-          <p className="mb-5 text-[11px] font-bold uppercase tracking-widest text-[#8a5d33]/70">
+          <p className="mb-5 text-xs text-slate-500">
             Signature algorithm distribution from current endpoint certificates
           </p>
           <BreakdownDonutCard
@@ -1396,12 +1268,12 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
           />
         </article>
 
-        <article className="rounded-3xl border border-amber-500/20 bg-white/60 p-6 shadow-sm backdrop-blur">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 flex items-center gap-2">
             <Calendar className="h-5 w-5 text-amber-600" />
             <h2 className="text-base font-bold text-[#3d200a]">Expiring Certificates</h2>
           </div>
-          <p className="mb-5 text-[11px] font-bold uppercase tracking-widest text-[#8a5d33]/70">
+          <p className="mb-5 text-xs text-slate-500">
             Current endpoint certificate expiry windows across expired, near-term, and long-lived certificates
           </p>
           <BreakdownDonutCard
@@ -1424,12 +1296,12 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       </section>
 
       <section>
-        <article className="rounded-3xl border border-amber-500/20 bg-white/60 p-6 shadow-sm backdrop-blur">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 flex items-center gap-2">
-            <Fingerprint className="h-5 w-5 text-sky-600" />
-            <h2 className="text-base font-bold text-[#3d200a]">Top Certificates by Identity</h2>
+            <Fingerprint className="h-5 w-5 text-[#8B0000]" />
+            <h2 className="text-base font-semibold text-slate-900">Top Certificates by Identity</h2>
           </div>
-          <p className="mb-5 text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/60">
+          <p className="mb-5 text-xs text-slate-500">
             Grouped by serial number and issuer
           </p>
           <TopCertificateCommonNamesCard rows={data.topCertificatesByIdentity || []} />
