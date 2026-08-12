@@ -154,10 +154,10 @@ function stableDirection(leftId: string, rightId: string) {
 }
 
 function collisionDistance(left: GraphNode, right: GraphNode) {
-  if (left.kind === "scanner" || right.kind === "scanner") return 118;
-  if (left.kind === "domain" && right.kind === "domain") return 88;
-  if (left.kind === "domain" || right.kind === "domain") return 72;
-  return 58;
+  if (left.kind === "scanner" || right.kind === "scanner") return 132;
+  if (left.kind === "domain" && right.kind === "domain") return 100;
+  if (left.kind === "domain" || right.kind === "domain") return 84;
+  return 68;
 }
 
 function applyNodeRepulsion(sourceNodes: GraphNode[]) {
