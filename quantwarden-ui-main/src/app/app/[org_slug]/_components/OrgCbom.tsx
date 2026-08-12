@@ -2,15 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  AlertTriangle,
   Boxes,
   Download,
   Fingerprint,
+  Info,
   KeyRound,
   Loader2,
   ScrollText,
   ShieldCheck,
   Waypoints,
+  X,
 } from "lucide-react";
 
 import { CBOM_NOT_REPORTED, type CbomResponse } from "@/lib/cbom";
@@ -33,6 +34,92 @@ type CsvColumn<T> = {
 type OrgCbomProps = {
   org: { id: string };
 };
+
+type DetailDialogState = {
+  title: string;
+  description?: string;
+  items: string[];
+};
+
+function DialogShell({
+  title,
+  description,
+  onClose,
+  children,
+}: {
+  title: string;
+  description?: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cbom-dialog-title"
+        className="flex max-h-[min(38rem,calc(100dvh-2rem))] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+      >
+        <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          <div className="min-w-0">
+            <h2 id="cbom-dialog-title" className="text-lg font-semibold text-slate-950">{title}</h2>
+            {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+            aria-label="Close dialog"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </header>
+        <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
+      </section>
+    </div>
+  );
+}
+
+function ValueListButton({
+  label,
+  title,
+  description,
+  items,
+  onOpen,
+}: {
+  label: ReactNode;
+  title: string;
+  description?: string;
+  items: string[];
+  onOpen: (dialog: DetailDialogState) => void;
+}) {
+  if (items.length === 0) return <span className="text-slate-400">0</span>;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen({ title, description, items })}
+      className="rounded-md px-2 py-1 font-medium tabular-nums text-[#8B0000] underline decoration-[#8B0000]/30 underline-offset-4 transition hover:bg-[#8B0000]/5 hover:decoration-[#8B0000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8B0000]/30"
+      aria-label={`View ${title}`}
+    >
+      {label}
+    </button>
+  );
+}
 
 function downloadJson(filename: string, payload: unknown) {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -116,10 +203,10 @@ function TableShell({
   }, []);
 
   return (
-    <div className="relative">
+    <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
       <div
         ref={scrollRef}
-        className="custom-scrollbar max-h-[35rem] overflow-auto border-t border-slate-200 bg-white"
+        className="custom-scrollbar h-full max-w-full overflow-auto border-t border-slate-200 bg-white"
       >
         <table className={`${minWidthClass} w-full border-collapse text-left text-xs text-[#3d200a]`}>
           {children}
@@ -219,7 +306,7 @@ function DataPanel({
   children: ReactNode;
 }) {
   return (
-    <section>
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
         <div>
           <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
@@ -261,6 +348,8 @@ export default function OrgCbom({ org }: OrgCbomProps) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<CbomTabKey>("assets");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("cyclonedx");
+  const [detailDialog, setDetailDialog] = useState<DetailDialogState | null>(null);
+  const [showNotes, setShowNotes] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -334,11 +423,18 @@ export default function OrgCbom({ org }: OrgCbomProps) {
                 <tr key={row.assetId} className="transition hover:bg-slate-50">
                   <TableCell><span className="font-medium text-slate-950">{row.assetName}</span></TableCell>
                   <TableCell noWrap>{row.assetType}</TableCell>
-                  <TableCell mono noWrap>{row.endpoints.map((endpoint) => `${endpoint.port}/${endpoint.protocol}`).join(", ")}</TableCell>
-                  <TableCell><span className="block text-center tabular-nums">{row.algorithms.length}</span></TableCell>
-                  <TableCell><span className="block text-center tabular-nums">{row.keys.length}</span></TableCell>
-                  <TableCell><span className="block text-center tabular-nums">{row.protocols.length}</span></TableCell>
-                  <TableCell><span className="block text-center tabular-nums">{row.certificates.length}</span></TableCell>
+                  <TableCell>
+                    <ValueListButton
+                      label={`${row.endpoints.length} ${row.endpoints.length === 1 ? "endpoint" : "endpoints"}`}
+                      title={`${row.assetName} — scanned endpoints`}
+                      items={row.endpoints.map((endpoint) => `${endpoint.port}/${endpoint.protocol.toUpperCase()}`)}
+                      onOpen={setDetailDialog}
+                    />
+                  </TableCell>
+                  <TableCell><span className="block text-center"><ValueListButton label={row.algorithms.length} title={`${row.assetName} — algorithms`} items={row.algorithms.map((item) => item.name)} onOpen={setDetailDialog} /></span></TableCell>
+                  <TableCell><span className="block text-center"><ValueListButton label={row.keys.length} title={`${row.assetName} — keys`} items={row.keys.map((item) => item.name)} onOpen={setDetailDialog} /></span></TableCell>
+                  <TableCell><span className="block text-center"><ValueListButton label={row.protocols.length} title={`${row.assetName} — protocols`} items={row.protocols.map((item) => `${item.name} ${item.version}`)} onOpen={setDetailDialog} /></span></TableCell>
+                  <TableCell><span className="block text-center"><ValueListButton label={row.certificates.length} title={`${row.assetName} — certificates`} items={row.certificates.map((item) => item.subjectCN === CBOM_NOT_REPORTED ? item.name : item.subjectCN)} onOpen={setDetailDialog} /></span></TableCell>
                 </tr>
               ))}
             </tbody>
@@ -380,7 +476,7 @@ export default function OrgCbom({ org }: OrgCbomProps) {
                 <TableHeadCell>Crypto Functions</TableHeadCell>
                 <TableHeadCell>Classical Security Level</TableHeadCell>
                 <TableHeadCell>OID</TableHeadCell>
-                <TableHeadCell>List</TableHeadCell>
+                <TableHeadCell>Observed assets</TableHeadCell>
               </tr>
             </thead>
             <tbody className="bg-white/45">
@@ -391,10 +487,26 @@ export default function OrgCbom({ org }: OrgCbomProps) {
                   <TableCell>{row.assetType}</TableCell>
                   <TableCell noWrap>{row.primitive}</TableCell>
                   <TableCell noWrap>{row.mode}</TableCell>
-                  <TableCell>{row.cryptoFunctions}</TableCell>
+                  <TableCell>
+                    {row.cryptoFunctions === CBOM_NOT_REPORTED ? row.cryptoFunctions : (
+                      <ValueListButton
+                        label={`${row.cryptoFunctions.split(", ").length} functions`}
+                        title={`${row.name} — cryptographic functions`}
+                        items={row.cryptoFunctions.split(", ")}
+                        onOpen={setDetailDialog}
+                      />
+                    )}
+                  </TableCell>
                   <TableCell noWrap>{row.classicalSecurityLevel}</TableCell>
                   <TableCell mono>{row.oid}</TableCell>
-                  <TableCell>{row.list}</TableCell>
+                  <TableCell>
+                    <ValueListButton
+                      label={`${row.assets.length} ${row.assets.length === 1 ? "asset" : "assets"}`}
+                      title={`${row.name} — observed assets`}
+                      items={row.assets}
+                      onOpen={setDetailDialog}
+                    />
+                  </TableCell>
                 </tr>
               ))}
             </tbody>
@@ -503,7 +615,17 @@ export default function OrgCbom({ org }: OrgCbomProps) {
                   <TableCell noWrap>{row.name}</TableCell>
                   <TableCell>{row.assetType}</TableCell>
                   <TableCell noWrap>{row.version}</TableCell>
-                  <TableCell>{row.cipherSuites}</TableCell>
+                  <TableCell>
+                    {row.cipherSuites === CBOM_NOT_REPORTED ? row.cipherSuites : (
+                      <ValueListButton
+                        label={`${row.cipherSuites.split(", ").length} cipher suites`}
+                        title={`${row.name} ${row.version} — cipher suites`}
+                        description={row.assetType}
+                        items={row.cipherSuites.split(", ")}
+                        onOpen={setDetailDialog}
+                      />
+                    )}
+                  </TableCell>
                   <TableCell mono>{row.oid}</TableCell>
                 </tr>
               ))}
@@ -626,7 +748,7 @@ export default function OrgCbom({ org }: OrgCbomProps) {
   };
 
   return (
-    <div className="mx-auto flex max-w-[1500px] flex-col gap-5 pb-10 animate-in fade-in duration-300">
+    <div className="mx-auto flex h-[calc(100dvh-8rem)] w-full min-w-0 max-w-[1500px] flex-col gap-4 overflow-hidden animate-in fade-in duration-300">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-[#8B0000]">
@@ -637,10 +759,21 @@ export default function OrgCbom({ org }: OrgCbomProps) {
             Cryptographic inventory derived from the latest completed endpoint scans.
           </p>
         </div>
-        <p className="text-xs text-[#8a5d33]">Generated {new Date(data.generatedAt).toLocaleString()}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-[#8a5d33]">Generated {new Date(data.generatedAt).toLocaleString()}</p>
+          <button
+            type="button"
+            onClick={() => setShowNotes(true)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#8B0000]/20 bg-white/70 text-[#8B0000] transition hover:border-[#8B0000]/40 hover:bg-white"
+            aria-label="Coverage and export information"
+            title="Coverage and export information"
+          >
+            <Info className="h-4 w-4" />
+          </button>
+        </div>
       </header>
 
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white/80 shadow-sm backdrop-blur">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white/80 shadow-sm backdrop-blur">
         <nav aria-label="CBOM inventory" className="flex overflow-x-auto border-b border-slate-200 px-3">
           {tabs.map((tab) => {
             const selected = tab.key === activeTab;
@@ -678,19 +811,35 @@ export default function OrgCbom({ org }: OrgCbomProps) {
         </DataPanel>
       </section>
 
-      <details className="rounded-lg border border-slate-200 bg-white/60 px-4 py-3 text-sm">
-        <summary className="flex cursor-pointer items-center gap-2 font-medium text-slate-700">
-          <AlertTriangle className="h-4 w-4 text-[#8B0000]" /> Coverage and export notes
-        </summary>
-        <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 text-slate-600">
+      {showNotes ? (
+        <DialogShell title="Coverage and export information" onClose={() => setShowNotes(false)}>
+          <div className="space-y-3 text-sm leading-6 text-slate-600">
           <p>
             CycloneDX {CYCLONEDX_CBOM_SPEC_VERSION} is the native CBOM export. SPDX {SPDX_INTEROP_SPEC_VERSION} is provided as an interoperability view. Per-asset export creates a CycloneDX document for each asset.
           </p>
           <ul className="list-disc space-y-1 pl-5">
             {data.notes.map((note) => <li key={note}>{note}</li>)}
           </ul>
-        </div>
-      </details>
+          </div>
+        </DialogShell>
+      ) : null}
+
+      {detailDialog ? (
+        <DialogShell
+          title={detailDialog.title}
+          description={detailDialog.description}
+          onClose={() => setDetailDialog(null)}
+        >
+          <ol className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+            {detailDialog.items.map((item, index) => (
+              <li key={`${item}-${index}`} className="flex gap-3 px-4 py-3 text-sm text-slate-700">
+                <span className="w-6 shrink-0 text-right text-xs tabular-nums text-slate-400">{index + 1}</span>
+                <span className="min-w-0 break-words">{item}</span>
+              </li>
+            ))}
+          </ol>
+        </DialogShell>
+      ) : null}
     </div>
   );
 }
