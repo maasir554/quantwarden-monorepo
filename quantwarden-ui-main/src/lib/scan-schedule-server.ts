@@ -4,7 +4,7 @@ import { getEnabledPortList, normalizePortDiscoveryConfig } from "@/lib/port-dis
 import type { ScanBatchType, ScanBatchStatus, ScanEngine } from "@/lib/scan-activity-types";
 
 export type ScanScheduleMode = "one_time" | "recurring";
-export type ScanScheduleFrequency = "hourly" | "daily" | "weekly";
+export type ScanScheduleFrequency = "hourly" | "daily" | "weekly" | "monthly";
 export type ScanScheduleRunStatus =
   | "pending"
   | "queued"
@@ -122,7 +122,7 @@ type ScheduleRunRow = {
 const VALID_TYPES = new Set<ScanBatchType>(["single", "group", "full"]);
 const VALID_ENGINES = new Set<ScanEngine>(["openssl", "portDiscovery"]);
 const VALID_MODES = new Set<ScanScheduleMode>(["one_time", "recurring"]);
-const VALID_FREQUENCIES = new Set<ScanScheduleFrequency>(["hourly", "daily", "weekly"]);
+const VALID_FREQUENCIES = new Set<ScanScheduleFrequency>(["hourly", "daily", "weekly", "monthly"]);
 
 function addInterval(date: Date, frequency: ScanScheduleFrequency, interval: number) {
   const next = new Date(date);
@@ -135,7 +135,12 @@ function addInterval(date: Date, frequency: ScanScheduleFrequency, interval: num
     return next;
   }
 
-  next.setUTCDate(next.getUTCDate() + interval * 7);
+  if (frequency === "weekly") {
+    next.setUTCDate(next.getUTCDate() + interval * 7);
+    return next;
+  }
+
+  next.setUTCMonth(next.getUTCMonth() + interval);
   return next;
 }
 

@@ -28,7 +28,7 @@ export function loadWorkerConfig(): WorkerConfig {
     activeExecutorTickMs: parseIntEnv("SCAN_WORKER_ACTIVE_EXECUTOR_TICK_MS", 1500, { min: 250, max: 60000 }),
     activeSchedulerTickMs: parseIntEnv("SCAN_WORKER_ACTIVE_SCHEDULER_TICK_MS", 10000, { min: 1000, max: 300000 }),
     idleExecutorTickMs: parseIntEnv("SCAN_WORKER_IDLE_EXECUTOR_TICK_MS", 1800000, { min: 5000, max: 3600000 }),
-    idleSchedulerTickMs: parseIntEnv("SCAN_WORKER_IDLE_SCHEDULER_TICK_MS", 1800000, { min: 5000, max: 3600000 }),
+    idleSchedulerTickMs: parseIntEnv("SCAN_WORKER_IDLE_SCHEDULER_TICK_MS", 60000, { min: 5000, max: 3600000 }),
     activeGraceMs: parseIntEnv("SCAN_WORKER_ACTIVE_GRACE_MS", 60000, { min: 1000, max: 900000 }),
     activeOrgQueryLimit: parseIntEnv("SCAN_WORKER_ACTIVE_ORG_LIMIT", 100, { min: 1, max: 1000 }),
     maxConcurrentJobs: parseIntEnv("SCAN_WORKER_MAX_CONCURRENT_JOBS", 6, { min: 1, max: 100 }),

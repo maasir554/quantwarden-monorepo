@@ -7,6 +7,7 @@ import { runSubdomainDiscoveryItem } from "@/lib/subdomain-discovery-runner";
 import { ensureScanSchedulingTables, runSchedulerMaintenanceCycle } from "@/lib/scan-schedule-server";
 import { advanceOrgWorkflows, listOrgsWithPendingWorkflows } from "@/lib/scan-workflow";
 import { ensureWorkflowTable } from "@/lib/scan-workflow-schema";
+import { ensureReportEmailSchedulingTables, runReportEmailMaintenanceCycle } from "@/lib/report-email-schedule-server";
 import type { ClaimedScanItem } from "@/lib/scan-batch-server";
 import { loadWorkerConfig } from "./config";
 import { logger } from "./logger";
@@ -472,6 +473,7 @@ async function runExecutorTickSafe() {
 
 async function runSchedulerTick() {
   await runSchedulerMaintenanceCycle();
+  await runReportEmailMaintenanceCycle();
   notifyLoop("executor");
 }
 
@@ -544,6 +546,7 @@ async function shutdown(signal: string) {
 
 async function main() {
   await ensureScanSchedulingTables();
+  await ensureReportEmailSchedulingTables();
   await ensureWorkflowTable();
   await startControlServer();
   await startHealthServer();

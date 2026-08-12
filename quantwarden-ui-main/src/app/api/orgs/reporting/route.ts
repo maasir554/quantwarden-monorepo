@@ -68,8 +68,12 @@ function sortAssetsForAction(left: ReportAssetEntry, right: ReportAssetEntry) {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session?.user) {
+    const internalSecret = process.env.SCAN_WORKER_WAKE_SECRET?.trim();
+    const internalRequest = Boolean(
+      internalSecret && req.headers.get("authorization") === `Bearer ${internalSecret}`
+    );
+    const session = internalRequest ? null : await auth.api.getSession({ headers: await headers() });
+    if (!internalRequest && !session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -80,18 +84,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing orgId" }, { status: 400 });
     }
 
-    const memberRows = await prisma.$queryRawUnsafe<{ id: string }[]>(
-      `SELECT id
-         FROM "member"
-        WHERE "organizationId" = $1
-          AND "userId" = $2
-        LIMIT 1`,
-      orgId,
-      session.user.id
-    );
+    if (!internalRequest) {
+      const memberRows = await prisma.$queryRawUnsafe<{ id: string }[]>(
+        `SELECT id
+           FROM "member"
+          WHERE "organizationId" = $1
+            AND "userId" = $2
+          LIMIT 1`,
+        orgId,
+        session!.user.id
+      );
 
-    if (memberRows.length === 0) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      if (memberRows.length === 0) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
 
     const orgRows = await prisma.$queryRawUnsafe<Array<{ id: string; name: string; slug: string }>>(

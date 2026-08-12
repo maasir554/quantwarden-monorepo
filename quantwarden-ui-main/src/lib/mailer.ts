@@ -16,6 +16,11 @@ export interface SendEmailInput {
   subject: string;
   html: string;
   from?: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer;
+    contentType?: string;
+  }>;
 }
 
 let cachedTransport: Transporter | null = null;
@@ -66,7 +71,7 @@ function getTransport(): Transporter {
  * Throws if email is not configured — callers that have a no-email fallback
  * should guard with isEmailConfigured() first.
  */
-export async function sendEmail({ to, subject, html, from }: SendEmailInput): Promise<void> {
+export async function sendEmail({ to, subject, html, from, attachments }: SendEmailInput): Promise<void> {
   if (!isEmailConfigured()) {
     throw new Error("SMTP is not configured (SMTP_HOST is unset). Email cannot be sent.");
   }
@@ -76,5 +81,6 @@ export async function sendEmail({ to, subject, html, from }: SendEmailInput): Pr
     to,
     subject,
     html,
+    attachments,
   });
 }
