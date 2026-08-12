@@ -42,6 +42,7 @@ type GraphNode = {
   labelDx?: number;
   labelDy?: number;
   labelAnchor?: "start" | "middle" | "end";
+  alwaysLabel?: boolean;
 };
 
 type GraphEdge = {
@@ -69,7 +70,7 @@ const centerX = graphWidth / 2;
 const centerY = graphHeight / 2;
 const minZoom = 0.18;
 const maxZoom = 3.2;
-const graphPadding = 140;
+const graphPadding = 28;
 
 const nodeStyles: Record<GraphNodeKind, { fill: string; stroke: string; text: string }> = {
   domain: { fill: "#2563eb", stroke: "#1d4ed8", text: "#1e3a8a" },
@@ -147,6 +148,7 @@ function buildGraph(assets: AssetRow[]) {
     x: centerX,
     y: centerY,
     radius: 32,
+    alwaysLabel: true,
   });
 
   for (const { asset, x, y, angle } of layoutAssetNodes(assets)) {
@@ -169,6 +171,7 @@ function buildGraph(assets: AssetRow[]) {
       labelDx: radialX * (asset.isRoot ? 45 : 40),
       labelDy: radialY * 40 + (Math.abs(radialY) < 0.3 ? 5 : 0),
       labelAnchor: radialX > 0.24 ? "start" : radialX < -0.24 ? "end" : "middle",
+      alwaysLabel: Boolean(asset.isRoot),
     });
 
     const parentVisible = asset.parentId && visibleAssetIds.has(asset.parentId);
@@ -490,10 +493,15 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                     const showPrimaryLabel =
                       isActive ||
                       selectedNodeId === node.id ||
-                      viewport.zoom >= 0.62 ||
-                      (!isDenseGraph && (node.kind === "domain" || node.kind === "scanner")) ||
-                      (node.kind === "scanner" && viewport.zoom >= 0.32);
+                      node.alwaysLabel ||
+                      (viewport.zoom >= 0.62 && node.kind === "domain") ||
+                      (viewport.zoom >= 0.82 && node.kind === "ip") ||
+                      viewport.zoom >= 1.08;
                     const showSecondaryLabel = isActive || viewport.zoom >= 1.05;
+                    const primaryFontSize = (node.kind === "service" ? 12 : 14) / viewport.zoom;
+                    const secondaryFontSize = 11 / viewport.zoom;
+                    const primaryStrokeWidth = 6 / viewport.zoom;
+                    const secondaryStrokeWidth = 5 / viewport.zoom;
 
                     return (
                       <g
@@ -517,11 +525,11 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                             y={node.labelDy ?? node.radius + 20}
                             textAnchor={node.labelAnchor ?? "middle"}
                             dominantBaseline="middle"
-                            fontSize={node.kind === "service" ? "13" : "15"}
+                            fontSize={primaryFontSize}
                             fontWeight="650"
                             fill={style.text}
                             stroke="#f8fafc"
-                            strokeWidth="7"
+                            strokeWidth={primaryStrokeWidth}
                             paintOrder="stroke"
                             strokeLinejoin="round"
                             style={{ pointerEvents: "none", fontFamily: "ui-sans-serif, system-ui, sans-serif" }}
@@ -535,11 +543,11 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                             y={(node.labelDy ?? node.radius + 20) + 17}
                             textAnchor={node.labelAnchor ?? "middle"}
                             dominantBaseline="middle"
-                            fontSize="12"
+                            fontSize={secondaryFontSize}
                             fontWeight="500"
                             fill="#475569"
                             stroke="#f8fafc"
-                            strokeWidth="6"
+                            strokeWidth={secondaryStrokeWidth}
                             paintOrder="stroke"
                             style={{ pointerEvents: "none", fontFamily: "ui-sans-serif, system-ui, sans-serif" }}
                           >
