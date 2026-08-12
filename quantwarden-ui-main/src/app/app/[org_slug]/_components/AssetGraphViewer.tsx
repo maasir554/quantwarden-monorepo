@@ -347,12 +347,25 @@ function getLabelCandidates(
 
 export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const dragStateRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const dragStateRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
+  const suppressCanvasClickRef = useRef(false);
   const fittedOrgRef = useRef<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 1200, height: 720 });
   const [viewport, setViewport] = useState<Viewport>(() => getFitViewport(1200, 720));
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectedNodeId(null);
+        setHoveredNodeId(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const graph = useMemo(() => buildGraph(org.assets || []), [org.assets]);
   const nodeById = useMemo(() => new Map(graph.nodes.map((node) => [node.id, node])), [graph.nodes]);
@@ -591,12 +604,14 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
               startY: event.clientY,
               originX: viewport.x,
               originY: viewport.y,
+              moved: false,
             };
           }}
           onMouseMove={(event) => {
             if (!dragStateRef.current) return;
             const dx = event.clientX - dragStateRef.current.startX;
             const dy = event.clientY - dragStateRef.current.startY;
+            if (Math.hypot(dx, dy) > 4) dragStateRef.current.moved = true;
             setViewport((current) => ({
               ...current,
               x: dragStateRef.current ? dragStateRef.current.originX + dx : current.x,
@@ -604,6 +619,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
             }));
           }}
           onMouseUp={() => {
+            suppressCanvasClickRef.current = Boolean(dragStateRef.current?.moved);
             dragStateRef.current = null;
           }}
           onMouseLeave={() => {
@@ -638,7 +654,16 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                     : "Large graph: labels fade in as you zoom."}
                 </div>
               ) : null}
-              <svg className="block h-full w-full bg-slate-50">
+              <svg
+                className="block h-full w-full bg-slate-50"
+                onClick={() => {
+                  if (suppressCanvasClickRef.current) {
+                    suppressCanvasClickRef.current = false;
+                    return;
+                  }
+                  setSelectedNodeId(null);
+                }}
+              >
                 <rect width="100%" height="100%" fill="#f8fafc" />
                 <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}>
                   {visibleEdges.map((edge) => {
@@ -678,7 +703,14 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                         opacity={isDimmed ? 0.28 : 1}
                         onMouseEnter={() => setHoveredNodeId(node.id)}
                         onMouseLeave={() => setHoveredNodeId(null)}
-                        onClick={() => setSelectedNodeId((current) => (current === node.id ? null : node.id))}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (suppressCanvasClickRef.current) {
+                            suppressCanvasClickRef.current = false;
+                            return;
+                          }
+                          setSelectedNodeId((current) => (current === node.id ? null : node.id));
+                        }}
                       >
                         <circle r={(node.radius + 8) / viewport.zoom} fill="transparent" />
                         <circle
