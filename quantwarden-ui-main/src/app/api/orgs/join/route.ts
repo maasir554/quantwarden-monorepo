@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Organization not found. Check the code and try again." }, { status: 404 });
     }
     const orgId = orgRows[0].id;
-    const isPublic = orgRows[0].isPublic;
+    const requestsAllowed = orgRows[0].isPublic;
 
     // Check if user is already a member
     const memberRows = await prisma.$queryRawUnsafe<{ id: string }[]>(
@@ -52,30 +52,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "You already have a pending request for this organization." }, { status: 400 });
     }
 
-    if (isPublic) {
-      // Public org: instant join
-      const newMemberId = crypto.randomUUID().replace(/-/g, "");
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO "member" (id, "organizationId", "userId", role, "createdAt") VALUES ($1, $2, $3, $4, $5)`,
-        newMemberId,
-        orgId,
-        session.user.id,
-        "member",
-        new Date()
+    if (!requestsAllowed) {
+      return NextResponse.json(
+        { error: "This organization is invite only. Ask an administrator to invite you." },
+        { status: 403 }
       );
-      return NextResponse.json({ success: true, instant: true, organizationId: orgId });
-    } else {
-      // Private org: create join request for admin approval
-      const requestId = crypto.randomUUID();
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO "join_request" (id, "organizationId", "userId", status, "createdAt") VALUES ($1, $2, $3, 'pending', $4)`,
-        requestId,
-        orgId,
-        session.user.id,
-        new Date()
-      );
-      return NextResponse.json({ success: true, instant: false, requestPending: true, organizationId: orgId });
     }
+
+    const requestId = crypto.randomUUID();
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "join_request" (id, "organizationId", "userId", status, "createdAt") VALUES ($1, $2, $3, 'pending', $4)`,
+      requestId,
+      orgId,
+      session.user.id,
+      new Date()
+    );
+    return NextResponse.json({ success: true, requestPending: true, organizationId: orgId });
   } catch (error) {
     console.error("Join org error:", error);
     return NextResponse.json(

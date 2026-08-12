@@ -32,7 +32,6 @@ import {
   ArrowRight,
 
   Crown,
-  Globe,
   Lock,
   Check,
   X,
@@ -267,16 +266,9 @@ export default function AppDashboard() {
       } else {
         setShowJoinModal(false);
         setJoinSlug("");
-        if (data.instant) {
-          // Instant join (public org)
-          router.refresh();
-          fetchOrgs();
-        } else {
-          // Request sent (private org)
-          setJoinSuccess("Your request has been sent to the organization admin for approval.");
-          fetchOrgs();
-          setTimeout(() => setJoinSuccess(null), 6000);
-        }
+        setJoinSuccess("Your request has been sent to the organization administrators for approval.");
+        fetchOrgs();
+        setTimeout(() => setJoinSuccess(null), 6000);
       }
     } catch {
       setError("Something went wrong.");
@@ -579,9 +571,9 @@ export default function AppDashboard() {
                       </span>
                       <span className="inline-flex items-center gap-1.5 text-sm font-bold text-[#8a5d33]">
                         {org.isPublic ? (
-                          <><Globe className="w-3.5 h-3.5" /> Public</>
+                          <><Users className="w-3.5 h-3.5" /> Requests allowed</>
                         ) : (
-                          <><Lock className="w-3.5 h-3.5" /> Private</>
+                          <><Lock className="w-3.5 h-3.5" /> Invite only</>
                         )}
                       </span>
                     </div>
@@ -861,7 +853,7 @@ export default function AppDashboard() {
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-white tracking-tight">Join Organization</h3>
-                  <p className="text-white/80 text-sm mt-0.5">Enter the organization code.</p>
+                  <p className="text-white/80 text-sm mt-0.5">Enter a code to request access.</p>
                 </div>
               </div>
               <button
@@ -910,7 +902,7 @@ export default function AppDashboard() {
                   disabled={joining || joinSlug.length < 3}
                   className="flex-1 flex items-center justify-center py-3 px-4 rounded-xl font-bold text-white bg-linear-to-r from-[#8B0000] to-[#5a0000] hover:from-[#7a0000] hover:to-[#4a0000] transition-all shadow-md disabled:opacity-50"
                 >
-                  {joining ? <Loader2 className="w-5 h-5 animate-spin" /> : "Join"}
+                  {joining ? <Loader2 className="w-5 h-5 animate-spin" /> : "Request access"}
                 </button>
               </div>
             </form>

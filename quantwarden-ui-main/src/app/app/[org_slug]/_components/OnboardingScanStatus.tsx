@@ -96,23 +96,23 @@ export function OnboardingScanStatus({
   const failed = workflow.status === "failed";
 
   return (
-    <div className={`mb-4 rounded-2xl border px-4 py-3 shadow-sm backdrop-blur ${
-      failed ? "border-red-300/70 bg-red-50/90" : "border-cyan-300/55 bg-cyan-50/90"
+    <div className={`mb-4 overflow-hidden rounded-2xl border bg-white/60 shadow-sm backdrop-blur ${
+      failed ? "border-red-300/70" : "border-white/70"
     }`}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white ${
-            failed ? "bg-red-600" : "bg-cyan-600"
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+            failed ? "bg-red-100 text-red-700" : "bg-[#8B0000]/10 text-[#8B0000]"
           }`}>
             {failed
               ? <AlertTriangle className="h-5 w-5" />
               : <Icon className={`h-5 w-5 ${workflow.status === "running" ? "animate-pulse" : ""}`} />}
           </div>
           <div className="min-w-0">
-            <p className={`text-sm font-black ${failed ? "text-red-950" : "text-cyan-950"}`}>
+            <p className={`text-sm font-bold ${failed ? "text-red-950" : "text-[#3d200a]"}`}>
               {failed ? `Initial scan stopped during ${meta.title.toLowerCase()}` : meta.title}
             </p>
-            <p className={`mt-0.5 text-xs font-semibold ${failed ? "text-red-900/70" : "text-cyan-900/70"}`}>
+            <p className={`mt-0.5 text-xs font-medium ${failed ? "text-red-900/70" : "text-[#8a5d33]"}`}>
               {failed ? "Open the Activity Monitor to review the failure before analysis can be shown." : meta.detail}
             </p>
           </div>
@@ -121,7 +121,7 @@ export function OnboardingScanStatus({
           <button
             type="button"
             onClick={openMonitor}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-red-700 px-3 py-2 text-xs font-bold text-white transition hover:bg-red-800"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white transition hover:bg-red-800"
           >
             <AlertTriangle className="h-3.5 w-3.5" />
             Review failure
@@ -130,18 +130,23 @@ export function OnboardingScanStatus({
           <button
             type="button"
             onClick={openMonitor}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-cyan-700 px-3 py-2 text-xs font-bold text-white transition hover:bg-cyan-800"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-[#8B0000]/15 bg-white/70 px-3 py-2 text-xs font-bold text-[#8B0000] transition hover:bg-white"
           >
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             {percent}% complete
           </button>
         ) : (
-          <span className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-cyan-100 px-3 py-2 text-xs font-bold text-cyan-800">
+          <span className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#8B0000]/8 px-3 py-2 text-xs font-bold text-[#8B0000]">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Preparing
           </span>
         )}
       </div>
+      {!failed && activeBatch ? (
+        <div className="h-1 bg-[#8B0000]/8">
+          <div className="h-full bg-[#8B0000] transition-[width] duration-500" style={{ width: `${Math.max(2, Math.min(100, percent))}%` }} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -156,24 +161,22 @@ export function FirstScanAnalysisNotice({
   area: "overview" | "pqc";
 }) {
   const { workflow, meta } = useInitialScanStatus(orgId, orgSlug);
-  const title = area === "pqc"
-    ? "Let the first complete scan finish to view PQC posture"
-    : "Let the first complete scan finish to view security analysis";
+  const title = area === "pqc" ? "PQC posture is being prepared" : "Security analysis is being prepared";
 
   return (
-    <div className="rounded-2xl border border-amber-300/70 bg-amber-50/90 p-5 shadow-sm">
+    <div className="rounded-2xl border border-white/70 bg-white/55 p-5 shadow-sm backdrop-blur">
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-700">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#8B0000]/10 text-[#8B0000]">
           {workflow ? <Loader2 className="h-5 w-5 animate-spin" /> : <AlertTriangle className="h-5 w-5" />}
         </div>
         <div>
-          <h2 className="text-sm font-black text-[#3d200a]">{title}</h2>
-          <p className="mt-1 text-sm font-semibold leading-relaxed text-[#8a5d33]">
+          <h2 className="text-sm font-bold text-[#3d200a]">{title}</h2>
+          <p className="mt-1 text-sm font-medium leading-relaxed text-[#8a5d33]">
             {workflow?.status === "failed"
               ? `The initial workflow stopped during ${meta?.title.toLowerCase() || "scanning"}. Resolve or rerun it before analysis is shown.`
               : meta
-              ? `${meta.title} is currently in progress. Analysis becomes available after subdomain discovery, port discovery, and the initial TLS/OpenSSL scan complete.`
-              : "Analysis becomes available after subdomain discovery, port discovery, and the initial TLS/OpenSSL scan complete."}
+              ? `${meta.title} is in progress. Results will appear here automatically when the initial scan finishes.`
+              : "Results will appear here automatically when the initial scan finishes."}
           </p>
         </div>
       </div>

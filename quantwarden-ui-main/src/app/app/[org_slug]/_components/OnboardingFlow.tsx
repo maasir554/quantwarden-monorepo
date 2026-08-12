@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Loader2, ArrowRight, ArrowLeft, Globe, Lock, Search, EyeOff, Plus, Trash2, Mail, User, Check, Copy, Info, ChevronDown, ChevronLeft, ChevronRight, Send, XCircle, CheckCircle2, Clock } from "lucide-react";
+import { Loader2, ArrowRight, ArrowLeft, Globe, Lock, Plus, Trash2, Mail, User, Check, Copy, Info, ChevronDown, ChevronLeft, ChevronRight, Send, XCircle, CheckCircle2, Clock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getRoleStyle } from "@/lib/utils";
 
@@ -147,8 +147,9 @@ export default function OnboardingFlow({ org }: { org: any }) {
   };
 
   // Step 1 State
-  const [visibility, setVisibility] = useState<"hidden" | "public">(org.discoverable ? "public" : "hidden");
-  const [approval, setApproval] = useState<"private" | "public">(org.isPublic ? "public" : "private");
+  const [joiningPolicy, setJoiningPolicy] = useState<"invite_only" | "requests_allowed">(
+    org.isPublic ? "requests_allowed" : "invite_only"
+  );
 
   // Step 2 State
   const [domains, setDomains] = useState<string[]>(org.domains || []);
@@ -265,8 +266,6 @@ export default function OnboardingFlow({ org }: { org: any }) {
   // Background Auto-Save
   const autoSave = async (data: any) => {
     setAutoSaveStatus("saving");
-    const { visibility: _v, approval: _a, domains: _d, ...restData } = data; // For potential use directly, but we map specific objects.
-
     try {
       await fetch("/api/orgs/setup", {
         method: "POST",
@@ -284,14 +283,9 @@ export default function OnboardingFlow({ org }: { org: any }) {
     }
   };
 
-  const handleVisibilityChange = (val: "hidden" | "public") => {
-    setVisibility(val);
-    autoSave({ discoverable: val === "public" });
-  };
-
-  const handleApprovalChange = (val: "private" | "public") => {
-    setApproval(val);
-    autoSave({ isPublic: val === "public" });
+  const handleJoiningPolicyChange = (val: "invite_only" | "requests_allowed") => {
+    setJoiningPolicy(val);
+    autoSave({ discoverable: false, isPublic: val === "requests_allowed" });
   };
 
   const handleAddDomain = (e: React.FormEvent) => {
@@ -462,8 +456,8 @@ export default function OnboardingFlow({ org }: { org: any }) {
 
     try {
       await autoSave({
-        discoverable: visibility === "public",
-        isPublic: approval === "public",
+        discoverable: false,
+        isPublic: joiningPolicy === "requests_allowed",
         roles,
         setupComplete: true,
       });
@@ -602,78 +596,48 @@ export default function OnboardingFlow({ org }: { org: any }) {
         )}
 
         <div className="p-8 md:p-10">
-          {/* STEP 1: Privacy Settings */}
+          {/* STEP 1: Joining policy */}
           {step === 1 && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-right-4">
-              <div className="space-y-4">
-                <h2 className="text-xl font-bold text-[#3d200a]">Search Visibility</h2>
-                <div className="grid grid-cols-1 md:grid-grid-cols-2 gap-4">
-                  <button
-                    onClick={() => handleVisibilityChange("hidden")}
-                    className={`flex flex-col items-start p-5 rounded-xl border-2 transition-all text-left ${
-                      visibility === "hidden"
-                        ? "border-[#8B0000]/80 bg-[#8B0000]/12 shadow-md shadow-[#8B0000]/15 ring-1 ring-[#8B0000]/20"
-                        : "border-amber-500/18 hover:border-amber-500/35 bg-transparent hover:bg-white/25"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-2 font-bold text-[#3d200a]">
-                      <EyeOff className={`w-5 h-5 ${visibility === "hidden" ? "text-[#8B0000]" : "text-[#8a5d33]"}`} /> Hidden (Default)
-                    </div>
-                    <p className="text-sm text-[#8a5d33] font-medium leading-relaxed">
-                      Your organization won't appear in search results. Members must know the exact join code.
-                    </p>
-                  </button>
-
-                  <button
-                    onClick={() => handleVisibilityChange("public")}
-                    className={`flex flex-col items-start p-5 rounded-xl border-2 transition-all text-left ${
-                      visibility === "public"
-                        ? "border-[#8B0000]/80 bg-[#8B0000]/12 shadow-md shadow-[#8B0000]/15 ring-1 ring-[#8B0000]/20"
-                        : "border-amber-500/18 hover:border-amber-500/35 bg-transparent hover:bg-white/25"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-2 font-bold text-[#3d200a]">
-                      <Search className={`w-5 h-5 ${visibility === "public" ? "text-[#8B0000]" : "text-[#8a5d33]"}`} /> Public
-                    </div>
-                    <p className="text-sm text-[#8a5d33] font-medium leading-relaxed">
-                      Anyone can find your organization by searching its name.
-                    </p>
-                  </button>
-                </div>
+            <div className="space-y-5 animate-in fade-in slide-in-from-right-4">
+              <div>
+                <h2 className="text-xl font-bold text-[#3d200a]">How can people join?</h2>
+                <p className="mt-2 text-sm font-medium leading-relaxed text-[#8a5d33]">
+                  Invitations always work. Choose whether other users may also request access with the organization code.
+                </p>
               </div>
-
-              <div className="space-y-4 pt-4 border-t border-amber-500/10">
-                <h2 className="text-xl font-bold text-[#3d200a]">Joining Approval</h2>
+              <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button
-                    onClick={() => handleApprovalChange("private")}
+                    type="button"
+                    onClick={() => handleJoiningPolicyChange("invite_only")}
                     className={`flex flex-col items-start p-5 rounded-xl border-2 transition-all text-left ${
-                      approval === "private"
+                      joiningPolicy === "invite_only"
                         ? "border-[#8B0000]/80 bg-[#8B0000]/12 shadow-md shadow-[#8B0000]/15 ring-1 ring-[#8B0000]/20"
                         : "border-amber-500/18 hover:border-amber-500/35 bg-transparent hover:bg-white/25"
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-2 font-bold text-[#3d200a]">
-                      <Lock className={`w-5 h-5 ${approval === "private" ? "text-[#8B0000]" : "text-[#8a5d33]"}`} /> Private
+                      <Lock className={`w-5 h-5 ${joiningPolicy === "invite_only" ? "text-[#8B0000]" : "text-[#8a5d33]"}`} /> Invite only
                     </div>
                     <p className="text-sm text-[#8a5d33] font-medium leading-relaxed">
-                      Owners and admins must manually approve any request to join.
+                      Users can join only through an invitation. Join requests are disabled.
                     </p>
                   </button>
 
                   <button
-                    onClick={() => handleApprovalChange("public")}
+                    type="button"
+                    onClick={() => handleJoiningPolicyChange("requests_allowed")}
                     className={`flex flex-col items-start p-5 rounded-xl border-2 transition-all text-left ${
-                      approval === "public"
+                      joiningPolicy === "requests_allowed"
                         ? "border-[#8B0000]/80 bg-[#8B0000]/12 shadow-md shadow-[#8B0000]/15 ring-1 ring-[#8B0000]/20"
                         : "border-amber-500/18 hover:border-amber-500/35 bg-transparent hover:bg-white/25"
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-2 font-bold text-[#3d200a]">
-                      <Globe className={`w-5 h-5 ${approval === "public" ? "text-[#8B0000]" : "text-[#8a5d33]"}`} /> Public
+                      <User className={`w-5 h-5 ${joiningPolicy === "requests_allowed" ? "text-[#8B0000]" : "text-[#8a5d33]"}`} /> Requests allowed
                     </div>
                     <p className="text-sm text-[#8a5d33] font-medium leading-relaxed">
-                      Anyone who knows the joining code can instantly join as a member without approval.
+                      Users with the organization code can request access. An admin must approve or deny each request.
                     </p>
                   </button>
                 </div>

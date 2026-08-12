@@ -117,7 +117,6 @@ export default function AdminConsole() {
   const [editingOrg, setEditingOrg] = useState<AdminOrganization | null>(null);
   const [editOrgName, setEditOrgName] = useState("");
   const [editOrgPublic, setEditOrgPublic] = useState(false);
-  const [editOrgDiscoverable, setEditOrgDiscoverable] = useState(false);
 
   const [memberPanel, setMemberPanel] = useState<MemberPanel | null>(null);
   const [membersLoading, setMembersLoading] = useState(false);
@@ -254,7 +253,6 @@ export default function AdminConsole() {
     setEditingOrg(organization);
     setEditOrgName(organization.name);
     setEditOrgPublic(organization.isPublic);
-    setEditOrgDiscoverable(organization.discoverable);
     setError("");
   };
 
@@ -267,7 +265,7 @@ export default function AdminConsole() {
       await jsonRequest("/api/admin/organizations", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ organizationId: editingOrg.id, name: editOrgName, isPublic: editOrgPublic, discoverable: editOrgDiscoverable }),
+        body: JSON.stringify({ organizationId: editingOrg.id, name: editOrgName, isPublic: editOrgPublic, discoverable: false }),
       });
       setEditingOrg(null);
       notify("Organization settings updated.");
@@ -502,8 +500,7 @@ export default function AdminConsole() {
         <Modal title="Organization settings" onClose={() => !busy && setEditingOrg(null)}>
           <form onSubmit={saveOrganization} className="space-y-4 p-5">
             <label className="block text-sm font-medium text-slate-700">Organization name<input required value={editOrgName} onChange={(event) => setEditOrgName(event.target.value)} className={`mt-1.5 ${inputClass}`} /></label>
-            <label className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={editOrgPublic} onChange={(event) => setEditOrgPublic(event.target.checked)} className="h-4 w-4 accent-[#8B0000]" /> Public organization</label>
-            <label className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={editOrgDiscoverable} onChange={(event) => setEditOrgDiscoverable(event.target.checked)} className="h-4 w-4 accent-[#8B0000]" /> Discoverable in explorer</label>
+            <label className="flex items-start gap-3 rounded-lg border border-slate-200 p-3 text-sm text-slate-700"><input type="checkbox" checked={editOrgPublic} onChange={(event) => setEditOrgPublic(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[#8B0000]" /><span><strong className="block font-medium text-slate-900">Requests allowed</strong><span className="mt-0.5 block text-slate-500">Users with the organization code may request access. Leave off for invite-only access.</span></span></label>
             <div className="flex justify-end gap-2 border-t border-slate-200 pt-4"><button type="button" onClick={() => setEditingOrg(null)} className={secondaryButtonClass}>Cancel</button><button disabled={busy} className={primaryButtonClass}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Save settings</button></div>
           </form>
         </Modal>
