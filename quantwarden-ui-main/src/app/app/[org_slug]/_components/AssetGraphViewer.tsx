@@ -64,6 +64,15 @@ type Viewport = {
   zoom: number;
 };
 
+type LabelPlacement = {
+  dx: number;
+  dy: number;
+  anchor: "start" | "middle" | "end";
+  showSecondary: boolean;
+};
+
+type ScreenBox = { left: number; top: number; right: number; bottom: number };
+
 const graphWidth = 1600;
 const graphHeight = 1100;
 const centerX = graphWidth / 2;
@@ -221,9 +230,53 @@ function buildGraph(assets: AssetRow[]) {
   return { nodes: [...nodes.values()], edges: [...edges.values()] };
 }
 
+function boxesOverlap(left: ScreenBox, right: ScreenBox, gap = 5) {
+  return !(
+    left.right + gap <= right.left ||
+    left.left >= right.right + gap ||
+    left.bottom + gap <= right.top ||
+    left.top >= right.bottom + gap
+  );
+}
+
+function getLabelCandidates(
+  node: GraphNode,
+  zoom: number,
+  screenX: number,
+  screenY: number,
+  width: number,
+  height: number
+) {
+  const nodeRadius = node.radius * zoom;
+  const gap = 12;
+  const radialX = node.x === centerX && node.y === centerY ? 1 : (node.x - centerX) / Math.hypot(node.x - centerX, node.y - centerY);
+  const radialY = node.x === centerX && node.y === centerY ? 0 : (node.y - centerY) / Math.hypot(node.x - centerX, node.y - centerY);
+
+  const candidate = (labelX: number, labelY: number, anchor: LabelPlacement["anchor"]) => {
+    const left = anchor === "start" ? labelX : anchor === "end" ? labelX - width : labelX - width / 2;
+    return {
+      labelX,
+      labelY,
+      anchor,
+      box: { left, top: labelY - 10, right: left + width, bottom: labelY - 10 + height },
+    };
+  };
+
+  const right = candidate(screenX + nodeRadius + gap, screenY, "start");
+  const left = candidate(screenX - nodeRadius - gap, screenY, "end");
+  const top = candidate(screenX, screenY - nodeRadius - gap - Math.max(0, height - 20), "middle");
+  const bottom = candidate(screenX, screenY + nodeRadius + gap, "middle");
+
+  if (Math.abs(radialX) >= Math.abs(radialY)) {
+    return radialX >= 0 ? [right, top, bottom, left] : [left, top, bottom, right];
+  }
+  return radialY >= 0 ? [bottom, right, left, top] : [top, right, left, bottom];
+}
+
 export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const fittedOrgRef = useRef<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 1200, height: 720 });
@@ -242,7 +295,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
     });
     return connected;
   }, [activeNodeId, graph.edges]);
-  const activeNode = activeNodeId ? nodeById.get(activeNodeId) : null;
+  const selectedNode = selectedNodeId ? nodeById.get(selectedNodeId) : null;
   const portCount = org.assets.reduce((sum, asset) => sum + normalizeAssetOpenPorts(asset.openPorts).length, 0);
   const isDenseGraph = graph.nodes.length > 220;
   const isHugeGraph = graph.nodes.length > 700;
@@ -272,22 +325,75 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
     [graph.edges, visibleNodeIds]
   );
 
+  const labelPlacements = useMemo(() => {
+    const placements = new Map<string, LabelPlacement>();
+    const occupied: ScreenBox[] = visibleNodes.map((node) => {
+      const x = viewport.x + node.x * viewport.zoom;
+      const y = viewport.y + node.y * viewport.zoom;
+      const radius = node.radius * viewport.zoom + 7;
+      return { left: x - radius, top: y - radius, right: x + radius, bottom: y + radius };
+    });
+
+    const candidates = visibleNodes
+      .filter((node) => {
+        if (node.id === activeNodeId || node.id === selectedNodeId || node.alwaysLabel) return true;
+        if (viewport.zoom >= 1.08) return true;
+        if (viewport.zoom >= 0.82) return node.kind === "domain" || node.kind === "ip";
+        if (viewport.zoom >= 0.62) return node.kind === "domain";
+        return false;
+      })
+      .sort((left, right) => {
+        const priority = (node: GraphNode) =>
+          node.id === activeNodeId ? 0 : node.id === selectedNodeId ? 1 : node.kind === "scanner" ? 2 : node.alwaysLabel ? 3 : node.kind === "domain" ? 4 : node.kind === "ip" ? 5 : 6;
+        return priority(left) - priority(right);
+      });
+
+    candidates.forEach((node) => {
+      const isFocused = node.id === activeNodeId || node.id === selectedNodeId;
+      const showSecondary = isFocused && Boolean(node.sublabel);
+      const label = truncateLabel(node.label, isDenseGraph ? 20 : 28);
+      const sublabel = showSecondary ? truncateLabel(node.sublabel || "", 20) : "";
+      const width = Math.max(label.length * 7.4, sublabel.length * 6.2) + 8;
+      const height = showSecondary ? 38 : 20;
+      const screenX = viewport.x + node.x * viewport.zoom;
+      const screenY = viewport.y + node.y * viewport.zoom;
+      const options = getLabelCandidates(node, viewport.zoom, screenX, screenY, width, height);
+      const chosen = options.find((option) => occupied.every((box) => !boxesOverlap(option.box, box)));
+
+      if (!chosen) return;
+      occupied.push(chosen.box);
+      placements.set(node.id, {
+        dx: (chosen.labelX - screenX) / viewport.zoom,
+        dy: (chosen.labelY - screenY) / viewport.zoom,
+        anchor: chosen.anchor,
+        showSecondary,
+      });
+    });
+
+    return placements;
+  }, [activeNodeId, isDenseGraph, selectedNodeId, viewport, visibleNodes]);
+
   useEffect(() => {
     const element = viewportRef.current;
     if (!element) return;
 
     const updateSize = () => {
-      setViewportSize({
+      const nextSize = {
         width: Math.max(320, element.clientWidth),
         height: Math.max(360, element.clientHeight),
-      });
+      };
+      setViewportSize(nextSize);
+      if (fittedOrgRef.current !== org.id) {
+        fittedOrgRef.current = org.id;
+        setViewport(getFitViewport(nextSize.width, nextSize.height));
+      }
     };
 
     updateSize();
     const observer = new ResizeObserver(updateSize);
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [org.id]);
 
   useEffect(() => {
     const element = viewportRef.current;
@@ -307,10 +413,6 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
     element.addEventListener("wheel", handleWheel, { passive: false });
     return () => element.removeEventListener("wheel", handleWheel);
   }, [viewport.zoom]);
-
-  useEffect(() => {
-    setViewport(getFitViewport(viewportSize.width, viewportSize.height));
-  }, [org.id, viewportSize.width, viewportSize.height]);
 
   function setViewportZoom(nextZoom: number, anchorClientX?: number, anchorClientY?: number) {
     const element = viewportRef.current;
@@ -490,14 +592,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                     const style = nodeStyles[node.kind];
                     const isActive = activeNodeId === node.id;
                     const isDimmed = Boolean(activeNodeId && !connectedNodeIds.has(node.id));
-                    const showPrimaryLabel =
-                      isActive ||
-                      selectedNodeId === node.id ||
-                      node.alwaysLabel ||
-                      (viewport.zoom >= 0.62 && node.kind === "domain") ||
-                      (viewport.zoom >= 0.82 && node.kind === "ip") ||
-                      viewport.zoom >= 1.08;
-                    const showSecondaryLabel = isActive || viewport.zoom >= 1.05;
+                    const labelPlacement = labelPlacements.get(node.id);
                     const primaryFontSize = (node.kind === "service" ? 12 : 14) / viewport.zoom;
                     const secondaryFontSize = 11 / viewport.zoom;
                     const primaryStrokeWidth = 6 / viewport.zoom;
@@ -513,17 +608,18 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                         onMouseLeave={() => setHoveredNodeId(null)}
                         onClick={() => setSelectedNodeId((current) => (current === node.id ? null : node.id))}
                       >
+                        <circle r={node.radius + 8} fill="transparent" />
                         <circle
-                          r={Math.max(4, node.radius + (isActive ? 5 : 0))}
+                          r={node.radius}
                           fill={style.fill}
                           stroke={style.stroke}
-                          strokeWidth={isActive ? 3 : 2}
+                          strokeWidth={isActive ? 4 : 2}
                         />
-                        {showPrimaryLabel ? (
+                        {labelPlacement ? (
                           <text
-                            x={node.labelDx ?? 0}
-                            y={node.labelDy ?? node.radius + 20}
-                            textAnchor={node.labelAnchor ?? "middle"}
+                            x={labelPlacement.dx}
+                            y={labelPlacement.dy}
+                            textAnchor={labelPlacement.anchor}
                             dominantBaseline="middle"
                             fontSize={primaryFontSize}
                             fontWeight="650"
@@ -537,11 +633,11 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                             {truncateLabel(node.label, isDenseGraph ? 20 : 28)}
                           </text>
                         ) : null}
-                        {node.sublabel && showSecondaryLabel ? (
+                        {node.sublabel && labelPlacement?.showSecondary ? (
                           <text
-                            x={node.labelDx ?? 0}
-                            y={(node.labelDy ?? node.radius + 20) + 17}
-                            textAnchor={node.labelAnchor ?? "middle"}
+                            x={labelPlacement.dx}
+                            y={labelPlacement.dy + 17 / viewport.zoom}
+                            textAnchor={labelPlacement.anchor}
                             dominantBaseline="middle"
                             fontSize={secondaryFontSize}
                             fontWeight="500"
@@ -559,26 +655,26 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                   })}
                 </g>
               </svg>
+
+              {selectedNode ? (
+                <div className="absolute left-3 top-3 z-20 flex max-w-[min(28rem,calc(100%-1.5rem))] items-center gap-2 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-sm text-slate-600 shadow-md backdrop-blur">
+                  <span className="font-semibold" style={{ color: nodeStyles[selectedNode.kind].text }}>
+                    {selectedNode.label}
+                  </span>
+                  {selectedNode.sublabel ? <span className="truncate">{selectedNode.sublabel}</span> : null}
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                    {selectedNode.kind}
+                  </span>
+                  {selectedNode.assetId ? (
+                    <Link href={`/app/${org.slug}/asset/${selectedNode.assetId}`} className="ml-auto shrink-0 font-medium text-blue-700 hover:text-blue-900">
+                      Open asset
+                    </Link>
+                  ) : null}
+                </div>
+              ) : null}
             </>
           )}
         </div>
-
-        {activeNode ? (
-          <div className="flex flex-col gap-2 border-t border-slate-200 bg-white px-5 py-3 text-sm text-slate-600 sm:flex-row sm:items-center">
-            <span className="font-black" style={{ color: nodeStyles[activeNode.kind].text }}>
-              {activeNode.label}
-            </span>
-            {activeNode.sublabel ? <span>{activeNode.sublabel}</span> : null}
-            <span className="rounded-full bg-[#8B0000]/10 px-2 py-0.5 text-xs font-black uppercase tracking-wider text-[#8B0000]">
-              {activeNode.kind}
-            </span>
-            {activeNode.assetId ? (
-              <Link href={`/app/${org.slug}/asset/${activeNode.assetId}`} className="text-[#0e7490] hover:text-[#155e75] sm:ml-auto">
-                Open asset intelligence
-              </Link>
-            ) : null}
-          </div>
-        ) : null}
       </div>
     </div>
   );
