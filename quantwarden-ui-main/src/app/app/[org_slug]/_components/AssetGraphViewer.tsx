@@ -77,7 +77,7 @@ const graphWidth = 1600;
 const graphHeight = 1100;
 const centerX = graphWidth / 2;
 const centerY = graphHeight / 2;
-const minZoom = 0.18;
+const minZoom = 0.32;
 const maxZoom = 3.2;
 const graphPadding = 28;
 
@@ -143,6 +143,78 @@ function layoutAssetNodes(assets: AssetRow[]) {
   ];
 }
 
+function stableDirection(leftId: string, rightId: string) {
+  const value = `${leftId}:${rightId}`;
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  const angle = (hash % 360) * (Math.PI / 180);
+  return { x: Math.cos(angle), y: Math.sin(angle) };
+}
+
+function collisionDistance(left: GraphNode, right: GraphNode) {
+  if (left.kind === "scanner" || right.kind === "scanner") return 118;
+  if (left.kind === "domain" && right.kind === "domain") return 88;
+  if (left.kind === "domain" || right.kind === "domain") return 72;
+  return 58;
+}
+
+function applyNodeRepulsion(sourceNodes: GraphNode[]) {
+  const nodes = sourceNodes.map((node) => ({ ...node }));
+  const origins = new Map(nodes.map((node) => [node.id, { x: node.x, y: node.y }]));
+
+  for (let iteration = 0; iteration < 120; iteration += 1) {
+    const cooling = 1 - iteration / 150;
+
+    for (let leftIndex = 0; leftIndex < nodes.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < nodes.length; rightIndex += 1) {
+        const left = nodes[leftIndex];
+        const right = nodes[rightIndex];
+        let dx = right.x - left.x;
+        let dy = right.y - left.y;
+        let distance = Math.hypot(dx, dy);
+        const requiredDistance = collisionDistance(left, right);
+        if (distance >= requiredDistance) continue;
+
+        if (distance < 0.001) {
+          const direction = stableDirection(left.id, right.id);
+          dx = direction.x;
+          dy = direction.y;
+          distance = 1;
+        }
+
+        const push = ((requiredDistance - distance) * 0.48 * cooling) / distance;
+        const pushX = dx * push;
+        const pushY = dy * push;
+        const leftFixed = left.kind === "scanner";
+        const rightFixed = right.kind === "scanner";
+
+        if (!leftFixed) {
+          left.x -= pushX * (rightFixed ? 1 : 0.5);
+          left.y -= pushY * (rightFixed ? 1 : 0.5);
+        }
+        if (!rightFixed) {
+          right.x += pushX * (leftFixed ? 1 : 0.5);
+          right.y += pushY * (leftFixed ? 1 : 0.5);
+        }
+      }
+    }
+
+    nodes.forEach((node) => {
+      if (node.kind === "scanner") return;
+      const origin = origins.get(node.id);
+      if (!origin) return;
+      node.x += (origin.x - node.x) * 0.018;
+      node.y += (origin.y - node.y) * 0.018;
+      node.x = Math.min(graphWidth - 45, Math.max(45, node.x));
+      node.y = Math.min(graphHeight - 45, Math.max(45, node.y));
+    });
+  }
+
+  return nodes;
+}
+
 function buildGraph(assets: AssetRow[]) {
   const portRenderLimitPerAsset = assets.length > 800 ? 0 : assets.length > 280 ? 1 : assets.length > 140 ? 2 : 4;
   const visibleAssetIds = new Set(assets.map((asset) => asset.id));
@@ -156,7 +228,7 @@ function buildGraph(assets: AssetRow[]) {
     sublabel: `${assets.length} asset${assets.length === 1 ? "" : "s"}`,
     x: centerX,
     y: centerY,
-    radius: 32,
+    radius: 18,
     alwaysLabel: true,
   });
 
@@ -175,7 +247,7 @@ function buildGraph(assets: AssetRow[]) {
       sublabel: asset.type === "ip" ? "IP address" : asset.resolvedIp || (asset.isRoot ? "Root domain" : "Discovered asset"),
       x,
       y,
-      radius: asset.isRoot ? 27 : 23,
+      radius: asset.isRoot ? 14 : 11,
       assetId: asset.id,
       labelDx: radialX * (asset.isRoot ? 45 : 40),
       labelDy: radialY * 40 + (Math.abs(radialY) < 0.3 ? 5 : 0),
@@ -197,7 +269,7 @@ function buildGraph(assets: AssetRow[]) {
           sublabel: "Resolved IP",
           x: x + radialX * 82,
           y: y + radialY * 82,
-          radius: 20,
+          radius: 10,
           labelDx: radialX * 35,
           labelDy: radialY * 35,
           labelAnchor: radialX > 0.24 ? "start" : radialX < -0.24 ? "end" : "middle",
@@ -217,7 +289,7 @@ function buildGraph(assets: AssetRow[]) {
         sublabel: port.number === 443 ? "TLS" : "Open port",
         x: x + radialX * 128 + tangentX * offset,
         y: y + radialY * 128 + tangentY * offset,
-        radius: 17,
+        radius: 8,
         assetId: asset.id,
         labelDx: radialX * 30,
         labelDy: radialY * 30,
@@ -227,7 +299,7 @@ function buildGraph(assets: AssetRow[]) {
     });
   }
 
-  return { nodes: [...nodes.values()], edges: [...edges.values()] };
+  return { nodes: applyNodeRepulsion([...nodes.values()]), edges: [...edges.values()] };
 }
 
 function boxesOverlap(left: ScreenBox, right: ScreenBox, gap = 5) {
@@ -247,7 +319,7 @@ function getLabelCandidates(
   width: number,
   height: number
 ) {
-  const nodeRadius = node.radius * zoom;
+  const nodeRadius = node.radius;
   const gap = 12;
   const radialX = node.x === centerX && node.y === centerY ? 1 : (node.x - centerX) / Math.hypot(node.x - centerX, node.y - centerY);
   const radialY = node.x === centerX && node.y === centerY ? 0 : (node.y - centerY) / Math.hypot(node.x - centerX, node.y - centerY);
@@ -330,7 +402,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
     const occupied: ScreenBox[] = visibleNodes.map((node) => {
       const x = viewport.x + node.x * viewport.zoom;
       const y = viewport.y + node.y * viewport.zoom;
-      const radius = node.radius * viewport.zoom + 7;
+      const radius = node.radius + 7;
       return { left: x - radius, top: y - radius, right: x + radius, bottom: y + radius };
     });
 
@@ -608,12 +680,12 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                         onMouseLeave={() => setHoveredNodeId(null)}
                         onClick={() => setSelectedNodeId((current) => (current === node.id ? null : node.id))}
                       >
-                        <circle r={node.radius + 8} fill="transparent" />
+                        <circle r={(node.radius + 8) / viewport.zoom} fill="transparent" />
                         <circle
-                          r={node.radius}
+                          r={node.radius / viewport.zoom}
                           fill={style.fill}
                           stroke={style.stroke}
-                          strokeWidth={isActive ? 4 : 2}
+                          strokeWidth={(isActive ? 4 : 2) / viewport.zoom}
                         />
                         {labelPlacement ? (
                           <text
