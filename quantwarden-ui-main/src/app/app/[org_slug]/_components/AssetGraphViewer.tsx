@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, Globe, Minus, Network, Plus, RotateCcw, Search, Server } from "lucide-react";
+import { Minus, Network, Plus, RotateCcw } from "lucide-react";
 import { normalizeAssetOpenPorts } from "@/lib/port-discovery";
 
 type AssetGraphViewerProps = {
@@ -39,6 +39,9 @@ type GraphNode = {
   y: number;
   radius: number;
   assetId?: string;
+  labelDx?: number;
+  labelDy?: number;
+  labelAnchor?: "start" | "middle" | "end";
 };
 
 type GraphEdge = {
@@ -61,7 +64,7 @@ type Viewport = {
 };
 
 const graphWidth = 1600;
-const graphHeight = 920;
+const graphHeight = 1100;
 const centerX = graphWidth / 2;
 const centerY = graphHeight / 2;
 const minZoom = 0.18;
@@ -69,21 +72,14 @@ const maxZoom = 3.2;
 const graphPadding = 140;
 
 const nodeStyles: Record<GraphNodeKind, { fill: string; stroke: string; text: string }> = {
-  domain: { fill: "#0e2a3d", stroke: "#0891b2", text: "#0e7490" },
-  ip: { fill: "#1a1040", stroke: "#4f46e5", text: "#4f46e5" },
-  service: { fill: "#0e2d20", stroke: "#059669", text: "#047857" },
-  scanner: { fill: "#2d0e1a", stroke: "#be123c", text: "#be123c" },
+  domain: { fill: "#2563eb", stroke: "#1d4ed8", text: "#1e3a8a" },
+  ip: { fill: "#7c3aed", stroke: "#6d28d9", text: "#4c1d95" },
+  service: { fill: "#059669", stroke: "#047857", text: "#065f46" },
+  scanner: { fill: "#991b1b", stroke: "#7f1d1d", text: "#7f1d1d" },
 };
 
 function truncateLabel(value: string, maxLength = 24) {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
-}
-
-function formatDate(value?: string | Date | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function clampZoom(value: number) {
@@ -132,31 +128,14 @@ function layoutAssetNodes(assets: AssetRow[]) {
     .sort((left, right) => left.value.localeCompare(right.value));
 
   return [
-    ...layoutAssetGroup(rootAssets, 175, 125, 10),
-    ...layoutAssetGroup(childAssets, rootAssets.length > 0 ? 330 : 175, 145, 16),
+    ...layoutAssetGroup(rootAssets, 185, 145, 8),
+    ...layoutAssetGroup(childAssets, rootAssets.length > 0 ? 390 : 230, 155, 18),
   ];
 }
 
-function buildGraph(assets: AssetRow[], search: string) {
-  const normalizedSearch = search.trim().toLowerCase();
+function buildGraph(assets: AssetRow[]) {
   const portRenderLimitPerAsset = assets.length > 800 ? 0 : assets.length > 280 ? 1 : assets.length > 140 ? 2 : 4;
-  const searchableAssets = normalizedSearch
-    ? assets.filter((asset) => {
-        const portTokens = normalizeAssetOpenPorts(asset.openPorts).flatMap((port) => [
-          String(port.number),
-          `${port.number}/${port.protocol}`,
-          `${port.number}/${port.protocol.toUpperCase()}`,
-        ]);
-
-        return [asset.value, asset.type, asset.resolvedIp, asset.scanStatus, asset.portDiscoveryStatus, ...portTokens]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedSearch);
-      })
-    : assets;
-
-  const visibleAssetIds = new Set(searchableAssets.map((asset) => asset.id));
+  const visibleAssetIds = new Set(assets.map((asset) => asset.id));
   const nodes = new Map<string, GraphNode>();
   const edges = new Map<string, GraphEdge>();
 
@@ -164,13 +143,13 @@ function buildGraph(assets: AssetRow[], search: string) {
     id: "scanner",
     kind: "scanner",
     label: "Asset Scanner",
-    sublabel: `${searchableAssets.length} asset${searchableAssets.length === 1 ? "" : "s"}`,
+    sublabel: `${assets.length} asset${assets.length === 1 ? "" : "s"}`,
     x: centerX,
     y: centerY,
     radius: 32,
   });
 
-  for (const { asset, x, y, angle } of layoutAssetNodes(searchableAssets)) {
+  for (const { asset, x, y, angle } of layoutAssetNodes(assets)) {
     const assetNodeId = `asset:${asset.id}`;
     const assetKind: GraphNodeKind = asset.type === "ip" ? "ip" : "domain";
     const radialX = Math.cos(angle);
@@ -187,6 +166,9 @@ function buildGraph(assets: AssetRow[], search: string) {
       y,
       radius: asset.isRoot ? 27 : 23,
       assetId: asset.id,
+      labelDx: radialX * (asset.isRoot ? 45 : 40),
+      labelDy: radialY * 40 + (Math.abs(radialY) < 0.3 ? 5 : 0),
+      labelAnchor: radialX > 0.24 ? "start" : radialX < -0.24 ? "end" : "middle",
     });
 
     const parentVisible = asset.parentId && visibleAssetIds.has(asset.parentId);
@@ -204,6 +186,9 @@ function buildGraph(assets: AssetRow[], search: string) {
           x: x + radialX * 82,
           y: y + radialY * 82,
           radius: 20,
+          labelDx: radialX * 35,
+          labelDy: radialY * 35,
+          labelAnchor: radialX > 0.24 ? "start" : radialX < -0.24 ? "end" : "middle",
         });
       }
       edges.set(`${assetNodeId}->${ipNodeId}`, { id: `${assetNodeId}->${ipNodeId}`, source: assetNodeId, target: ipNodeId });
@@ -212,7 +197,7 @@ function buildGraph(assets: AssetRow[], search: string) {
     const ports = normalizeAssetOpenPorts(asset.openPorts).slice(0, portRenderLimitPerAsset);
     ports.forEach((port, portIndex) => {
       const portNodeId = `port:${asset.id}:${port.number}:${port.protocol}`;
-      const offset = (portIndex - (ports.length - 1) / 2) * 46;
+      const offset = (portIndex - (ports.length - 1) / 2) * 54;
       nodes.set(portNodeId, {
         id: portNodeId,
         kind: "service",
@@ -222,6 +207,9 @@ function buildGraph(assets: AssetRow[], search: string) {
         y: y + radialY * 128 + tangentY * offset,
         radius: 17,
         assetId: asset.id,
+        labelDx: radialX * 30,
+        labelDy: radialY * 30,
+        labelAnchor: radialX > 0.24 ? "start" : radialX < -0.24 ? "end" : "middle",
       });
       edges.set(`${assetNodeId}->${portNodeId}`, { id: `${assetNodeId}->${portNodeId}`, source: assetNodeId, target: portNodeId });
     });
@@ -233,13 +221,12 @@ function buildGraph(assets: AssetRow[], search: string) {
 export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
-  const [search, setSearch] = useState("");
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 1200, height: 720 });
   const [viewport, setViewport] = useState<Viewport>(() => getFitViewport(1200, 720));
 
-  const graph = useMemo(() => buildGraph(org.assets || [], search), [org.assets, search]);
+  const graph = useMemo(() => buildGraph(org.assets || []), [org.assets]);
   const nodeById = useMemo(() => new Map(graph.nodes.map((node) => [node.id, node])), [graph.nodes]);
   const activeNodeId = hoveredNodeId || selectedNodeId;
   const connectedNodeIds = useMemo(() => {
@@ -253,13 +240,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
     return connected;
   }, [activeNodeId, graph.edges]);
   const activeNode = activeNodeId ? nodeById.get(activeNodeId) : null;
-  const rootCount = org.assets.filter((asset) => asset.isRoot).length;
-  const ipCount = new Set(org.assets.map((asset) => (asset.type === "ip" ? asset.value : asset.resolvedIp)).filter(Boolean)).size;
   const portCount = org.assets.reduce((sum, asset) => sum + normalizeAssetOpenPorts(asset.openPorts).length, 0);
-  const lastAssetDate = [...org.assets]
-    .map((asset) => asset.createdAt)
-    .filter(Boolean)
-    .sort((left, right) => new Date(right as string | Date).getTime() - new Date(left as string | Date).getTime())[0];
   const isDenseGraph = graph.nodes.length > 220;
   const isHugeGraph = graph.nodes.length > 700;
 
@@ -326,7 +307,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
 
   useEffect(() => {
     setViewport(getFitViewport(viewportSize.width, viewportSize.height));
-  }, [org.id, search, viewportSize.width, viewportSize.height]);
+  }, [org.id, viewportSize.width, viewportSize.height]);
 
   function setViewportZoom(nextZoom: number, anchorClientX?: number, anchorClientY?: number) {
     const element = viewportRef.current;
@@ -357,62 +338,22 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
   }
 
   return (
-    <div className="flex min-h-full flex-col gap-5">
-      <div className="rounded-[8px] border border-white/60 bg-white/62 px-5 py-5 shadow-sm backdrop-blur-xl sm:px-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="flex h-[calc(100dvh-8rem)] min-h-[560px] min-w-0 flex-col gap-3 overflow-hidden">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-[#3d200a]">Asset discoveries</h1>
+        <p className="mt-1 text-sm text-[#8a5d33]">Infrastructure relationships derived from discovery and port scans.</p>
+      </header>
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-extrabold uppercase tracking-[0.36em] text-[#8B0000]/70">Quantwarden</p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight text-[#3d200a] sm:text-4xl">Asset Discoveries</h1>
-          </div>
-          <div className="inline-flex w-fit items-center gap-2 rounded-[8px] border border-amber-500/20 bg-white/70 px-4 py-2 text-sm font-bold text-[#6d3f1d]">
-            <Calendar className="h-4 w-4 text-[#0e7490]" />
-            {lastAssetDate ? `Latest asset added ${formatDate(lastAssetDate)}` : "No asset timeline yet"}
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-[8px] border border-white/60 bg-white/62 p-5 shadow-sm backdrop-blur-xl sm:p-6">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#8a5d33]/55" />
-          <input
-            type="text"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search domains, IP addresses, ports, or status"
-            className="h-14 w-full rounded-[8px] border border-amber-500/20 bg-white/82 pl-12 pr-4 text-sm font-semibold text-[#3d200a] outline-none transition focus:border-[#8B0000]/30 focus:ring-2 focus:ring-[#8B0000]/10"
-          />
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          {[
-            { label: "Tracked assets", value: org.assets.length, icon: Network },
-            { label: "Root assets", value: rootCount, icon: Globe },
-            { label: "Known IPs", value: ipCount, icon: Server },
-          ].map((stat) => {
-            const Icon = stat.icon;
-            return (
-              <div key={stat.label} className="rounded-[8px] border border-amber-500/14 bg-white/72 px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-extrabold uppercase tracking-wider text-[#8a5d33]/70">{stat.label}</p>
-                  <Icon className="h-4 w-4 text-[#8B0000]" />
-                </div>
-                <p className="mt-2 text-2xl font-black text-[#3d200a]">{stat.value}</p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="min-h-[620px] overflow-hidden rounded-[8px] border border-white/65 bg-[#fff7dc]/86 shadow-sm backdrop-blur-xl">
-        <div className="flex flex-col gap-3 border-b border-amber-500/16 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-lg font-black text-[#3d200a]">Network Topology Graph</h2>
-            <p className="text-sm font-semibold text-[#8a5d33]">
+            <h2 className="text-base font-semibold text-slate-950">Network topology</h2>
+            <p className="text-xs text-slate-500">
               {graph.nodes.length} nodes, {graph.edges.length} links, {portCount} tracked open ports.
             </p>
           </div>
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-            <div className="flex flex-wrap gap-3 text-xs font-bold text-[#6d3f1d]">
+            <div className="flex flex-wrap gap-3 text-xs font-medium text-slate-600">
               {[
                 ["domain", "Web/Domain"],
                 ["ip", "IP Address"],
@@ -431,22 +372,22 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                 </span>
               ))}
             </div>
-            <div className="flex items-center gap-2 rounded-[8px] border border-amber-500/18 bg-white/72 p-1">
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
               <button
                 type="button"
                 onClick={() => updateZoom(-0.12)}
-                className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[#7a1f1f] transition hover:bg-[#8B0000]/10"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-white hover:text-slate-950"
                 aria-label="Zoom out"
               >
                 <Minus className="h-4 w-4" />
               </button>
-              <span className="min-w-14 text-center text-xs font-black text-[#6d3f1d]">
+              <span className="min-w-12 text-center text-xs font-semibold tabular-nums text-slate-600">
                 {Math.round(viewport.zoom * 100)}%
               </span>
               <button
                 type="button"
                 onClick={() => updateZoom(0.12)}
-                className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[#7a1f1f] transition hover:bg-[#8B0000]/10"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-white hover:text-slate-950"
                 aria-label="Zoom in"
               >
                 <Plus className="h-4 w-4" />
@@ -454,7 +395,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
               <button
                 type="button"
                 onClick={() => setViewport(getFitViewport(viewportSize.width, viewportSize.height))}
-                className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[#7a1f1f] transition hover:bg-[#8B0000]/10"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-white hover:text-slate-950"
                 aria-label="Reset zoom"
               >
                 <RotateCcw className="h-4 w-4" />
@@ -465,7 +406,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
 
         <div
           ref={viewportRef}
-          className="relative h-[70vh] overflow-hidden"
+          className="relative min-h-0 flex-1 overflow-hidden bg-slate-50"
           onMouseDown={(event) => {
             if (event.button !== 0) return;
             dragStateRef.current = {
@@ -510,18 +451,18 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
             </div>
           ) : (
             <>
-              <div className="pointer-events-none absolute left-4 top-4 z-10 rounded-[8px] border border-amber-500/18 bg-white/80 px-3 py-2 text-xs font-bold text-[#6d3f1d] backdrop-blur">
-                Drag to pan. Scroll to zoom. Hold `Shift` while scrolling for faster zoom.
+              <div className="pointer-events-none absolute bottom-3 left-3 z-10 rounded-md border border-slate-200 bg-white/90 px-2.5 py-1.5 text-[11px] font-medium text-slate-500 shadow-sm backdrop-blur">
+                Drag to pan · Scroll to zoom
               </div>
               {(isDenseGraph || isHugeGraph) ? (
-                <div className="pointer-events-none absolute right-4 top-4 z-10 rounded-[8px] border border-amber-500/18 bg-white/80 px-3 py-2 text-xs font-bold text-[#6d3f1d] backdrop-blur">
+                <div className="pointer-events-none absolute right-3 top-3 z-10 rounded-md border border-slate-200 bg-white/90 px-2.5 py-1.5 text-[11px] font-medium text-slate-500 shadow-sm backdrop-blur">
                   {isHugeGraph
                     ? "Dense mode: service nodes and most labels are reduced until you zoom in."
                     : "Large graph: labels fade in as you zoom."}
                 </div>
               ) : null}
-              <svg className="block h-full w-full bg-[#fff4cf]">
-                <rect width="100%" height="100%" fill="#fff4cf" />
+              <svg className="block h-full w-full bg-slate-50">
+                <rect width="100%" height="100%" fill="#f8fafc" />
                 <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}>
                   {visibleEdges.map((edge) => {
                     const source = nodeById.get(edge.source);
@@ -535,9 +476,9 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                         y1={source.y}
                         x2={target.x}
                         y2={target.y}
-                        stroke={isActive ? "#0e7490" : "rgba(137, 92, 26, 0.24)"}
-                        strokeWidth={isActive ? 2 : isHugeGraph ? 0.8 : 1.25}
-                        opacity={isHugeGraph ? 0.6 : 1}
+                        stroke={isActive ? "#64748b" : "#cbd5e1"}
+                        strokeWidth={isActive ? 2.5 : isHugeGraph ? 0.8 : 1.4}
+                        opacity={isHugeGraph ? 0.55 : 0.9}
                       />
                     );
                   })}
@@ -550,7 +491,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                       isActive ||
                       selectedNodeId === node.id ||
                       viewport.zoom >= 0.62 ||
-                      (!isDenseGraph && node.kind !== "service") ||
+                      (!isDenseGraph && (node.kind === "domain" || node.kind === "scanner")) ||
                       (node.kind === "scanner" && viewport.zoom >= 0.32);
                     const showSecondaryLabel = isActive || viewport.zoom >= 1.05;
 
@@ -572,24 +513,35 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                         />
                         {showPrimaryLabel ? (
                           <text
-                            y={node.radius + 18}
-                            textAnchor="middle"
-                            fontSize={node.kind === "service" ? "10" : "12"}
-                            fontWeight="800"
+                            x={node.labelDx ?? 0}
+                            y={node.labelDy ?? node.radius + 20}
+                            textAnchor={node.labelAnchor ?? "middle"}
+                            dominantBaseline="middle"
+                            fontSize={node.kind === "service" ? "13" : "15"}
+                            fontWeight="650"
                             fill={style.text}
-                            style={{ pointerEvents: "none", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                            stroke="#f8fafc"
+                            strokeWidth="7"
+                            paintOrder="stroke"
+                            strokeLinejoin="round"
+                            style={{ pointerEvents: "none", fontFamily: "ui-sans-serif, system-ui, sans-serif" }}
                           >
-                            {truncateLabel(node.label, isDenseGraph ? 18 : 24)}
+                            {truncateLabel(node.label, isDenseGraph ? 20 : 28)}
                           </text>
                         ) : null}
                         {node.sublabel && showSecondaryLabel ? (
                           <text
-                            y={node.radius + 33}
-                            textAnchor="middle"
-                            fontSize="11"
-                            fontWeight="700"
-                            fill="#7c5a34"
-                            style={{ pointerEvents: "none", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                            x={node.labelDx ?? 0}
+                            y={(node.labelDy ?? node.radius + 20) + 17}
+                            textAnchor={node.labelAnchor ?? "middle"}
+                            dominantBaseline="middle"
+                            fontSize="12"
+                            fontWeight="500"
+                            fill="#475569"
+                            stroke="#f8fafc"
+                            strokeWidth="6"
+                            paintOrder="stroke"
+                            style={{ pointerEvents: "none", fontFamily: "ui-sans-serif, system-ui, sans-serif" }}
                           >
                             {truncateLabel(node.sublabel, 20)}
                           </text>
@@ -604,7 +556,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
         </div>
 
         {activeNode ? (
-          <div className="flex flex-col gap-2 border-t border-amber-500/16 bg-white/62 px-5 py-3 text-sm font-semibold text-[#6d3f1d] sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-2 border-t border-slate-200 bg-white px-5 py-3 text-sm text-slate-600 sm:flex-row sm:items-center">
             <span className="font-black" style={{ color: nodeStyles[activeNode.kind].text }}>
               {activeNode.label}
             </span>
