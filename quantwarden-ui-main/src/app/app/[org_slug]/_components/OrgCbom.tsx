@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
+  Boxes,
   Download,
   Fingerprint,
   KeyRound,
@@ -10,7 +11,6 @@ import {
   ScrollText,
   ShieldCheck,
   Waypoints,
-  type LucideIcon,
 } from "lucide-react";
 
 import { CBOM_NOT_REPORTED, type CbomResponse } from "@/lib/cbom";
@@ -23,7 +23,7 @@ import {
 } from "@/lib/cbom-export";
 import { cn } from "@/lib/utils";
 
-type CbomTabKey = "algorithms" | "keys" | "protocols" | "certificates";
+type CbomTabKey = "assets" | "algorithms" | "keys" | "protocols" | "certificates";
 type ExportFormat = "cyclonedx" | "spdx" | "per-asset" | "csv";
 type CsvColumn<T> = {
   header: string;
@@ -77,8 +77,8 @@ function buildCsv<T>(rows: T[], columns: CsvColumn<T>[]) {
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-dashed border-amber-500/20 bg-white/55 p-6 text-center">
-      <p className="max-w-lg text-sm font-semibold text-[#8a5d33]/70">{label}</p>
+    <div className="flex min-h-[220px] items-center justify-center border-t border-slate-200 bg-white p-6 text-center">
+      <p className="max-w-lg text-sm text-slate-500">{label}</p>
     </div>
   );
 }
@@ -119,7 +119,7 @@ function TableShell({
     <div className="relative">
       <div
         ref={scrollRef}
-        className="custom-scrollbar max-h-[35rem] overflow-auto rounded-2xl border border-[#8a5d33]/10 bg-white/55"
+        className="custom-scrollbar max-h-[35rem] overflow-auto border-t border-slate-200 bg-white"
       >
         <table className={`${minWidthClass} w-full border-collapse text-left text-xs text-[#3d200a]`}>
           {children}
@@ -128,19 +128,19 @@ function TableShell({
 
       <div
         className={cn(
-          "pointer-events-none absolute inset-y-0 left-0 w-10 rounded-l-2xl bg-gradient-to-r from-[#fff6da] to-transparent transition-opacity duration-200",
+          "pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-white to-transparent transition-opacity duration-200",
           showLeftFade ? "opacity-100" : "opacity-0"
         )}
       />
       <div
         className={cn(
-          "pointer-events-none absolute inset-y-0 right-0 w-10 rounded-r-2xl bg-gradient-to-l from-[#fff6da] to-transparent transition-opacity duration-200",
+          "pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white to-transparent transition-opacity duration-200",
           showRightFade ? "opacity-100" : "opacity-0"
         )}
       />
       <div
         className={cn(
-          "pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-2xl bg-gradient-to-t from-[#fff6da] to-transparent transition-opacity duration-200",
+          "pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white to-transparent transition-opacity duration-200",
           showBottomFade ? "opacity-100" : "opacity-0"
         )}
       />
@@ -168,7 +168,7 @@ function TableHeadCell({
       rowSpan={rowSpan}
       colSpan={colSpan}
       className={cn(
-        "sticky border-b border-r border-white/15 bg-[#8B0000] px-3 py-2.5 text-[11px] font-bold tracking-[0.18em] text-white backdrop-blur-sm",
+          "sticky border-b border-r border-white/15 bg-[#6f0000] px-3 py-2.5 text-[11px] font-semibold text-white",
         topClass,
         zClass,
         centered ? "text-center" : ""
@@ -191,7 +191,7 @@ function TableCell({
   return (
     <td
       className={cn(
-        "border-b border-r border-[#8a5d33]/10 px-3 py-3 align-top text-sm",
+        "border-b border-r border-slate-200 px-3 py-3 align-top text-sm",
         mono ? "font-mono text-[12px]" : "",
         noWrap ? "whitespace-nowrap" : ""
       )}
@@ -204,7 +204,6 @@ function TableCell({
 function DataPanel({
   title,
   subtitle,
-  icon: Icon,
   count,
   exportFormat,
   onExportFormatChange,
@@ -213,7 +212,6 @@ function DataPanel({
 }: {
   title: string;
   subtitle: string;
-  icon: LucideIcon;
   count: number;
   exportFormat: ExportFormat;
   onExportFormatChange: (value: ExportFormat) => void;
@@ -221,29 +219,20 @@ function DataPanel({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-white/40 bg-white/45 p-5 shadow-sm ring-1 ring-amber-500/10 backdrop-blur-xl">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <section>
+      <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
         <div>
-          <div className="flex items-center gap-3">
-            <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#8B0000]/10 text-[#8B0000]">
-              <Icon className="h-5 w-5" />
-            </span>
-            <div>
-              <h2 className="text-xl font-black tracking-tight text-[#3d200a]">{title}</h2>
-              <p className="mt-1 text-sm font-semibold text-[#8a5d33]/75">{subtitle}</p>
-            </div>
-          </div>
+          <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+          <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="rounded-full border border-[#8B0000]/15 bg-white/75 px-3 py-1 text-xs font-bold text-[#8B0000]">
-            {count} rows
-          </span>
-          <div className="flex items-center gap-2 rounded-full border border-[#8B0000]/15 bg-white/80 px-2 py-2">
-            <span className="pl-2 text-xs font-bold uppercase tracking-[0.14em] text-[#8a5d33]/80">Export:</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-slate-500">{count} {count === 1 ? "row" : "rows"}</span>
+          <div className="flex items-center overflow-hidden rounded-lg border border-slate-300 bg-white">
             <select
               value={exportFormat}
               onChange={(event) => onExportFormatChange(event.target.value as ExportFormat)}
-              className="rounded-full border border-[#8a5d33]/10 bg-[#fffdf8] px-3 py-1.5 text-sm font-bold text-[#3d200a] outline-none transition focus:border-[#8B0000]/30 focus:ring-2 focus:ring-[#8B0000]/10"
+              aria-label="Export format"
+              className="border-0 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none"
             >
               <option value="cyclonedx">CycloneDX 1.6 JSON</option>
               <option value="spdx">SPDX 2.3 JSON</option>
@@ -253,7 +242,7 @@ function DataPanel({
             <button
               type="button"
               onClick={onExport}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#8B0000] text-white transition hover:bg-[#6f0000]"
+              className="inline-flex h-9 w-10 items-center justify-center border-l border-slate-300 bg-[#8B0000] text-white transition hover:bg-[#6f0000]"
               aria-label="Download selected CBOM export"
               title="Download selected export"
             >
@@ -270,7 +259,7 @@ function DataPanel({
 export default function OrgCbom({ org }: OrgCbomProps) {
   const [data, setData] = useState<CbomResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<CbomTabKey>("algorithms");
+  const [activeTab, setActiveTab] = useState<CbomTabKey>("assets");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("cyclonedx");
 
   useEffect(() => {
@@ -306,6 +295,56 @@ export default function OrgCbom({ org }: OrgCbomProps) {
     if (!data) return [];
 
     return [
+      {
+        key: "assets" as const,
+        label: "Assets",
+        icon: Boxes,
+        count: data.assets.length,
+        title: "Asset inventory",
+        subtitle: "Cryptographic coverage from the latest completed scan for each asset and endpoint.",
+        jsonFilename: "certin-cbom-assets.json",
+        csvFilename: "certin-cbom-assets.csv",
+        payload: data.assets,
+        csvContent: buildCsv(data.assets, [
+          { header: "Asset", accessor: (row) => row.assetName },
+          { header: "Type", accessor: (row) => row.assetType },
+          { header: "Endpoints", accessor: (row) => row.endpoints.map((endpoint) => `${endpoint.port}/${endpoint.protocol}`).join("\n") },
+          { header: "Algorithms", accessor: (row) => row.algorithms.length },
+          { header: "Keys", accessor: (row) => row.keys.length },
+          { header: "Protocols", accessor: (row) => row.protocols.length },
+          { header: "Certificates", accessor: (row) => row.certificates.length },
+        ]),
+        emptyLabel: "No assets have completed an OpenSSL endpoint scan yet.",
+        minWidthClass: "min-w-[820px]",
+        table: (
+          <>
+            <thead>
+              <tr>
+                <TableHeadCell>Asset</TableHeadCell>
+                <TableHeadCell>Type</TableHeadCell>
+                <TableHeadCell>Scanned endpoints</TableHeadCell>
+                <TableHeadCell centered>Algorithms</TableHeadCell>
+                <TableHeadCell centered>Keys</TableHeadCell>
+                <TableHeadCell centered>Protocols</TableHeadCell>
+                <TableHeadCell centered>Certificates</TableHeadCell>
+              </tr>
+            </thead>
+            <tbody>
+              {data.assets.map((row) => (
+                <tr key={row.assetId} className="transition hover:bg-slate-50">
+                  <TableCell><span className="font-medium text-slate-950">{row.assetName}</span></TableCell>
+                  <TableCell noWrap>{row.assetType}</TableCell>
+                  <TableCell mono noWrap>{row.endpoints.map((endpoint) => `${endpoint.port}/${endpoint.protocol}`).join(", ")}</TableCell>
+                  <TableCell><span className="block text-center tabular-nums">{row.algorithms.length}</span></TableCell>
+                  <TableCell><span className="block text-center tabular-nums">{row.keys.length}</span></TableCell>
+                  <TableCell><span className="block text-center tabular-nums">{row.protocols.length}</span></TableCell>
+                  <TableCell><span className="block text-center tabular-nums">{row.certificates.length}</span></TableCell>
+                </tr>
+              ))}
+            </tbody>
+          </>
+        ),
+      },
       {
         key: "algorithms" as const,
         label: "Algorithms",
@@ -587,111 +626,71 @@ export default function OrgCbom({ org }: OrgCbomProps) {
   };
 
   return (
-    <div className="flex flex-col space-y-5 pb-10 animate-in fade-in duration-300">
-      <section className="rounded-3xl border border-white/40 bg-white/40 p-5 shadow-sm ring-1 ring-amber-500/10 backdrop-blur-xl">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-[#8B0000]/10 text-[#8B0000]">
-                <ScrollText className="h-6 w-6" />
-              </span>
-              <div>
-                <h1 className="text-2xl font-black tracking-tight text-[#3d200a]">CERT-IN CBOM</h1>
-                <p className="mt-1 text-sm font-semibold text-[#8a5d33]/75">
-                  Cryptographic bill of materials aligned to the CERT-In table blueprint and derived from stored OpenSSL endpoint scans.
-                </p>
-              </div>
-            </div>
+    <div className="mx-auto flex max-w-[1500px] flex-col gap-5 pb-10 animate-in fade-in duration-300">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-[#8B0000]">
+            <ScrollText className="h-5 w-5" />
+            <h1 className="text-2xl font-semibold tracking-tight text-[#3d200a]">CERT-IN CBOM</h1>
           </div>
-          <div className="rounded-2xl border border-[#8B0000]/10 bg-white/75 px-4 py-3 text-right">
-            <p className="text-[11px] font-bold tracking-[0.18em] text-[#8a5d33]/70">Generated</p>
-            <p className="mt-1 text-sm font-bold text-[#3d200a]">{new Date(data.generatedAt).toLocaleString()}</p>
-          </div>
+          <p className="mt-1 max-w-3xl text-sm text-[#8a5d33]">
+            Cryptographic inventory derived from the latest completed endpoint scans.
+          </p>
         </div>
+        <p className="text-xs text-[#8a5d33]">Generated {new Date(data.generatedAt).toLocaleString()}</p>
+      </header>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-          {tabs.map((item) => {
-            const Icon = item.icon;
-            return (
-              <div
-                key={item.key}
-                className="rounded-2xl border border-[#8a5d33]/10 bg-white/70 px-4 py-3 text-[#3d200a]"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold tracking-[0.16em] text-[#8a5d33]/70">
-                    {item.label}
-                  </span>
-                  <Icon className="h-4 w-4 text-[#8B0000]" />
-                </div>
-                <div className="mt-2 text-2xl font-black">{item.count}</div>
-              </div>
-            );
-          })}
-        </div>
-
-        <details className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-50/80 p-4">
-          <summary className="flex cursor-pointer items-center gap-3 text-sm font-bold text-[#3d200a]">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-[#8B0000]" />
-            Data coverage and export standards
-          </summary>
-          <div className="mt-3 space-y-3 pl-8">
-            <p className="text-sm font-medium text-[#8a5d33]">
-              Native CBOM JSON uses CycloneDX {CYCLONEDX_CBOM_SPEC_VERSION}. The SPDX {SPDX_INTEROP_SPEC_VERSION} option is an interoperability view because SPDX does not define native cryptographic-asset classes. Per-asset export embeds one CycloneDX document for every asset.
-            </p>
-            <div className="space-y-2">
-              <ul className="space-y-1 text-sm font-medium text-[#8a5d33]">
-                {data.notes.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </details>
-      </section>
-
-      <section className="rounded-3xl border border-white/40 bg-white/45 p-3 shadow-sm ring-1 ring-amber-500/10 backdrop-blur-xl">
-        <div className="flex flex-wrap items-center gap-2">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white/80 shadow-sm backdrop-blur">
+        <nav aria-label="CBOM inventory" className="flex overflow-x-auto border-b border-slate-200 px-3">
           {tabs.map((tab) => {
             const selected = tab.key === activeTab;
-            const Icon = tab.icon;
             return (
               <button
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition",
-                  selected
-                    ? "border-[#8B0000]/15 bg-[#8B0000] text-white"
-                    : "border-[#8a5d33]/10 bg-white/70 text-[#8a5d33] hover:bg-white"
+                  "relative flex shrink-0 items-center gap-2 px-4 py-3 text-sm font-medium transition",
+                  selected ? "text-[#8B0000]" : "text-slate-500 hover:text-slate-900"
                 )}
               >
-                <Icon className="h-4 w-4" />
                 {tab.label}
-                <span className={cn("rounded-full px-2 py-0.5 text-xs", selected ? "bg-white/15 text-white" : "bg-[#8B0000]/8 text-[#8B0000]")}>
-                  {tab.count}
-                </span>
+                <span className={cn("rounded-full px-2 py-0.5 text-xs", selected ? "bg-[#8B0000]/10 text-[#8B0000]" : "bg-slate-100 text-slate-500")}>{tab.count}</span>
+                {selected ? <span className="absolute inset-x-3 bottom-0 h-0.5 bg-[#8B0000]" /> : null}
               </button>
             );
           })}
-        </div>
+        </nav>
+
+        <DataPanel
+          title={activeConfig.title}
+          subtitle={activeConfig.subtitle}
+          count={activeConfig.count}
+          exportFormat={exportFormat}
+          onExportFormatChange={setExportFormat}
+          onExport={handleExport}
+        >
+          {activeConfig.count === 0 ? (
+            <EmptyState label={activeConfig.emptyLabel} />
+          ) : (
+            <TableShell minWidthClass={activeConfig.minWidthClass}>{activeConfig.table}</TableShell>
+          )}
+        </DataPanel>
       </section>
 
-      <DataPanel
-        title={activeConfig.title}
-        subtitle={activeConfig.subtitle}
-        icon={activeConfig.icon}
-        count={activeConfig.count}
-        exportFormat={exportFormat}
-        onExportFormatChange={setExportFormat}
-        onExport={handleExport}
-      >
-        {activeConfig.count === 0 ? (
-          <EmptyState label={activeConfig.emptyLabel} />
-        ) : (
-          <TableShell minWidthClass={activeConfig.minWidthClass}>{activeConfig.table}</TableShell>
-        )}
-      </DataPanel>
+      <details className="rounded-lg border border-slate-200 bg-white/60 px-4 py-3 text-sm">
+        <summary className="flex cursor-pointer items-center gap-2 font-medium text-slate-700">
+          <AlertTriangle className="h-4 w-4 text-[#8B0000]" /> Coverage and export notes
+        </summary>
+        <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 text-slate-600">
+          <p>
+            CycloneDX {CYCLONEDX_CBOM_SPEC_VERSION} is the native CBOM export. SPDX {SPDX_INTEROP_SPEC_VERSION} is provided as an interoperability view. Per-asset export creates a CycloneDX document for each asset.
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            {data.notes.map((note) => <li key={note}>{note}</li>)}
+          </ul>
+        </div>
+      </details>
     </div>
   );
 }
