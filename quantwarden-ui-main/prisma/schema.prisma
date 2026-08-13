@@ -195,6 +195,7 @@ model Asset {
   resolvedIp     String?      // The resolved IP address for domain/subdomain assets
   openPorts      String?      // JSON string array of { number, protocol } open ports; defaults to [{ number: 443, protocol: "tcp" }] until discovery runs
   bucket         String       @default("General")
+  buckets        String?      // JSON string array of functional buckets; bucket remains the primary compatibility label
   scanStatus     String       @default("idle") // idle, scanning, failed
   lastScanDate   DateTime?
   portDiscoveryStatus String  @default("idle") // idle, scanning, completed, expired, failed

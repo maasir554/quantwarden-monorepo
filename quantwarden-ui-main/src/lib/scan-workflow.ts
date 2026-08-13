@@ -20,6 +20,7 @@ import {
 } from "@/lib/port-discovery";
 import { createScanBatch, isCreateScanBatchFailure } from "@/lib/scan-batch-create";
 import { notifyScanWorkerOfManualBatch } from "@/lib/scan-worker-wake";
+import { inferAssetBuckets } from "@/lib/asset-buckets";
 import { ensureWorkflowTable, type WorkflowRow, type WorkflowStep } from "@/lib/scan-workflow-schema";
 
 // ---------------------------------------------------------------------------
@@ -151,9 +152,10 @@ async function runSubdomainDiscovery(
   for (const sub of unique) {
     try {
       const leafId = crypto.randomUUID();
+      const buckets = inferAssetBuckets(sub);
       await prisma.$executeRawUnsafe(
-        `INSERT INTO "asset" (id, value, type, "isRoot", "organizationId", verified, "openPorts", "createdAt", "parentId")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO "asset" (id, value, type, "isRoot", "organizationId", verified, "openPorts", bucket, buckets, "createdAt", "parentId")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          ON CONFLICT DO NOTHING`,
         leafId,
         sub,
@@ -162,6 +164,8 @@ async function runSubdomainDiscovery(
         orgId,
         false,
         JSON.stringify([{ number: 443, protocol: "tcp" }]),
+        buckets[0],
+        JSON.stringify(buckets),
         new Date(),
         rootAssetId
       );

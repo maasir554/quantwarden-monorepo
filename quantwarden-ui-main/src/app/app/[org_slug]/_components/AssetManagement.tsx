@@ -26,13 +26,18 @@ import {
   CheckCircle2,
   TriangleAlert,
   Tags,
+  Filter,
+  Check,
 } from "lucide-react";
 import { useScanActivity } from "@/components/scan-activity-provider";
+import { cn } from "@/lib/utils";
 import {
   buildAssetBucketOptions,
   DEFAULT_ASSET_BUCKET,
   inferAssetBucket,
+  inferAssetBuckets,
   normalizeAssetBucket,
+  normalizeAssetBuckets,
   PREDEFINED_ASSET_BUCKETS,
 } from "@/lib/asset-buckets";
 import {
@@ -87,6 +92,10 @@ function getAssetIcon(type: "domain" | "ip" | "unknown") {
   }
 }
 
+function isDnsExpiredAsset(asset: { type: string; scanStatus?: string; portDiscoveryStatus?: string; resolvedIp?: string | null }) {
+  return asset.type === "domain" && (asset.scanStatus === "expired" || asset.portDiscoveryStatus === "expired");
+}
+
 function parseOpenPorts(raw: unknown): AssetPort[] {
   return normalizeAssetOpenPorts(raw);
 }
@@ -120,6 +129,7 @@ interface ManagedRootAsset {
   value: string;
   type: "domain" | "ip" | "unknown";
   bucket: string;
+  buckets: string[];
   addedAt: string;
   scanning: boolean;
   statusMessage?: string;
@@ -135,6 +145,7 @@ interface ManagedLeafAsset {
   value: string;
   type: "domain" | "ip" | "unknown";
   bucket: string;
+  buckets: string[];
   parentId: string | null;
   addedAt: string;
   scanStatus?: string;
@@ -318,11 +329,15 @@ function RenderResolvedIpChip({
   );
 }
 
-function AssetBucketChip({ bucket }: { bucket: string }) {
+function AssetBucketChips({ buckets, bucket }: { buckets?: string[]; bucket: string }) {
+  const labels = normalizeAssetBuckets(buckets || bucket).slice(0, 3);
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#8B0000]/8 px-2 py-0.5 text-[10px] font-bold text-[#8B0000]">
-      <Tags className="h-3 w-3" />
-      {bucket}
+    <span className="flex shrink-0 items-center gap-1">
+      {labels.map((label) => (
+        <span key={label} className="inline-flex items-center gap-1 rounded-full bg-[#8B0000]/8 px-2 py-0.5 text-[10px] font-bold text-[#8B0000]">
+          <Tags className="h-3 w-3" />{label}
+        </span>
+      ))}
     </span>
   );
 }
@@ -367,6 +382,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
       value: a.value,
       type: getAssetType(a.value),
       bucket: normalizeAssetBucket(a.bucket || inferAssetBucket(a.value)),
+      buckets: normalizeAssetBuckets(a.buckets || a.bucket, a.value),
       addedAt: new Date(a.createdAt).toISOString(),
       scanning: a.scanStatus === 'scanning',
       scanStatus: a.scanStatus,
@@ -385,6 +401,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
       value: a.value,
       type: getAssetType(a.value),
       bucket: normalizeAssetBucket(a.bucket || inferAssetBucket(a.value)),
+      buckets: normalizeAssetBuckets(a.buckets || a.bucket, a.value),
       parentId: a.parentId,
       addedAt: new Date(a.createdAt).toISOString(),
       scanStatus: a.scanStatus,
@@ -431,6 +448,12 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
   const [rootSearch, setRootSearch] = useState("");
   const [leafSearch, setLeafSearch] = useState("");
   const [bucketFilter, setBucketFilter] = useState("all");
+  const [dnsFilter, setDnsFilter] = useState<"all" | "expired" | "resolved" | "unresolved">("all");
+  const [bucketKeyword, setBucketKeyword] = useState("");
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(null);
+  const [isDeletingAssets, setIsDeletingAssets] = useState(false);
   const [bucketView, setBucketView] = useState<"flat" | "grouped">("flat");
   const [newBucketName, setNewBucketName] = useState("");
   const [editingBucketAsset, setEditingBucketAsset] = useState<{
@@ -598,6 +621,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
             resolvedIp: fresh.resolvedIp ?? null,
             openPorts: parseOpenPorts(fresh.openPorts),
             bucket: normalizeAssetBucket(fresh.bucket || inferAssetBucket(fresh.value)),
+            buckets: normalizeAssetBuckets(fresh.buckets || fresh.bucket, fresh.value),
             statusMessage: asset.scanning && fresh.scanStatus !== "scanning" ? "" : asset.statusMessage,
             subdomains: Array.from(
               new Set([
@@ -621,6 +645,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                 resolvedIp: fresh.resolvedIp ?? null,
                 openPorts: parseOpenPorts(fresh.openPorts),
                 bucket: normalizeAssetBucket(fresh.bucket || inferAssetBucket(fresh.value)),
+                buckets: normalizeAssetBuckets(fresh.buckets || fresh.bucket, fresh.value),
               }
             : asset;
         });
@@ -638,6 +663,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
             resolvedIp: asset.resolvedIp ?? null,
             openPorts: parseOpenPorts(asset.openPorts),
             bucket: normalizeAssetBucket(asset.bucket || inferAssetBucket(asset.value)),
+            buckets: normalizeAssetBuckets(asset.buckets || asset.bucket, asset.value),
           }));
 
         return newLeafs.length > 0 ? [...updatedLeafs, ...newLeafs] : updatedLeafs;
@@ -845,6 +871,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
       if (rootAssets.some((a) => a.value === val)) return; // duplicate
       if (newAssets.some((a) => a.value === val)) return; // duplicate in this batch
       const bucket = resolveAddBucket(val);
+      const buckets = bucketDraft === "__auto" && !newBucketName.trim() ? inferAssetBuckets(val) : [bucket];
       
       const assetId = `root-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       newAssets.push({
@@ -852,6 +879,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
         value: val,
         type,
         bucket,
+        buckets,
         addedAt: new Date().toISOString(),
         scanning: false,
         scanStatus: "idle",
@@ -865,10 +893,10 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
       fetch(`/api/orgs/assets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgId: org.id, value: val, type, isRoot: true, openPorts: assetPorts, bucket })
+        body: JSON.stringify({ orgId: org.id, value: val, type, isRoot: true, openPorts: assetPorts, bucket, buckets })
       }).then(res => res.json()).then(data => {
          if(data.asset) {
-            setRootAssets(prev => prev.map(a => a.id === assetId ? { ...a, id: data.asset.id, bucket: data.asset.bucket || bucket } : a));
+            setRootAssets(prev => prev.map(a => a.id === assetId ? { ...a, id: data.asset.id, bucket: data.asset.bucket || bucket, buckets: data.asset.buckets || buckets } : a));
          }
       }).catch(console.error);
     });
@@ -893,6 +921,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
       if (leafAssets.some((a) => a.value === val)) return;
       if (newAssets.some((a) => a.value === val)) return;
       const bucket = resolveAddBucket(val);
+      const buckets = bucketDraft === "__auto" && !newBucketName.trim() ? inferAssetBuckets(val) : [bucket];
       
       const assetId = `leaf-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       newAssets.push({
@@ -900,6 +929,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
         value: val,
         type,
         bucket,
+        buckets,
         parentId: null,
         addedAt: new Date().toISOString(),
         scanStatus: "idle",
@@ -912,10 +942,10 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
       fetch(`/api/orgs/assets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgId: org.id, value: val, type, isRoot: false, parentId: null, openPorts: assetPorts, bucket })
+        body: JSON.stringify({ orgId: org.id, value: val, type, isRoot: false, parentId: null, openPorts: assetPorts, bucket, buckets })
       }).then(res => res.json()).then(data => {
          if(data.asset) {
-            setLeafAssets(prev => prev.map(a => a.id === assetId ? { ...a, id: data.asset.id, bucket: data.asset.bucket || bucket } : a));
+            setLeafAssets(prev => prev.map(a => a.id === assetId ? { ...a, id: data.asset.id, bucket: data.asset.bucket || bucket, buckets: data.asset.buckets || buckets } : a));
          }
       }).catch(console.error);
     });
@@ -1252,6 +1282,34 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
     fetch(`/api/orgs/assets?id=${id}&orgId=${org.id}`, { method: 'DELETE' }).catch(console.error);
   };
 
+  const deleteAssets = async (ids: string[]) => {
+    const uniqueIds = Array.from(new Set(ids));
+    if (uniqueIds.length === 0 || isDeletingAssets) return;
+    setIsDeletingAssets(true);
+    try {
+      const response = await fetch(`/api/orgs/assets?orgId=${encodeURIComponent(org.id)}&ids=${encodeURIComponent(uniqueIds.join(","))}`, { method: "DELETE" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || "Could not delete the selected assets.");
+      setRootAssets((current) => current.filter((asset) => !uniqueIds.includes(asset.id)));
+      setLeafAssets((current) => current.filter((asset) => !uniqueIds.includes(asset.id) && !uniqueIds.includes(asset.parentId || "")));
+      setSelectedAssetIds(new Set());
+      setPendingDeleteIds(null);
+      toast.success(`${uniqueIds.length} asset${uniqueIds.length === 1 ? "" : "s"} deleted.`, { position: "bottom-right" });
+    } catch (error) {
+      toast.error("Could not delete assets.", { description: error instanceof Error ? error.message : "Please try again.", position: "bottom-right" });
+    } finally {
+      setIsDeletingAssets(false);
+    }
+  };
+
+  const toggleAssetSelection = (id: string) => {
+    setSelectedAssetIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
   const handleScanSubdomains = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     void startDiscovery(id);
@@ -1309,8 +1367,8 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
   };
 
   const startDiscovery = async (id: string) => {
-    const asset = rootAssets.find((a) => a.id === id);
-    if (!asset || asset.scanning || activeSubdomainDiscoveryAssetIds.has(id)) return;
+    const asset = [...rootAssets, ...leafAssets].find((a) => a.id === id);
+    if (!asset || ("scanning" in asset && asset.scanning) || activeSubdomainDiscoveryAssetIds.has(id)) return;
 
     setRootAssets(prev => prev.map(a => a.id === id ? { ...a, scanning: true, statusMessage: "Starting subdomain discovery..." } : a));
 
@@ -1418,16 +1476,25 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
   }, [activePortDiscoveryBatches.length, activeSubdomainDiscoveryBatches.length, fetchAssets, org.id]);
 
   // === Filtered lists ===
+  const matchesAdvancedFilters = (asset: ManagedRootAsset | ManagedLeafAsset) => {
+    const expired = isDnsExpiredAsset(asset);
+    const dnsMatches = dnsFilter === "all" || (dnsFilter === "expired" && expired) || (dnsFilter === "resolved" && Boolean(asset.resolvedIp)) || (dnsFilter === "unresolved" && asset.type === "domain" && !asset.resolvedIp);
+    const bucketMatches = bucketFilter === "all" || asset.buckets.includes(bucketFilter);
+    const keywordMatches = !bucketKeyword.trim() || asset.buckets.some((bucket) => bucket.toLowerCase().includes(bucketKeyword.trim().toLowerCase()));
+    return dnsMatches && bucketMatches && keywordMatches;
+  };
   const filteredRoot = rootAssets.filter((a) =>
-    (bucketFilter === "all" || a.bucket === bucketFilter) &&
+    matchesAdvancedFilters(a) &&
     (a.value.toLowerCase().includes(rootSearch.toLowerCase()) ||
-      a.bucket.toLowerCase().includes(rootSearch.toLowerCase()))
+      a.buckets.some((bucket) => bucket.toLowerCase().includes(rootSearch.toLowerCase())))
   );
   const filteredLeaf = leafAssets.filter((a) =>
-    (bucketFilter === "all" || a.bucket === bucketFilter) &&
+    matchesAdvancedFilters(a) &&
     (a.value.toLowerCase().includes(leafSearch.toLowerCase()) ||
-      a.bucket.toLowerCase().includes(leafSearch.toLowerCase()))
+      a.buckets.some((bucket) => bucket.toLowerCase().includes(leafSearch.toLowerCase())))
   );
+  const expiredAssetIds = allManagedAssets.filter(isDnsExpiredAsset).map((asset) => asset.id);
+  const activeFilterCount = Number(bucketFilter !== "all") + Number(dnsFilter !== "all") + Number(Boolean(bucketKeyword.trim()));
   const discoverableRootDomains = rootAssets.filter(
     (asset) => asset.type === "domain" && !asset.scanning && !activeSubdomainDiscoveryAssetIds.has(asset.id)
   );
@@ -1520,7 +1587,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
   // === Render Asset Row (Root) ===
   const renderRootAssetRow = (asset: typeof rootAssets[0]) => {
     const Icon = getAssetIcon(asset.type);
-    const isDnsExpired = asset.scanStatus === "expired" || asset.portDiscoveryStatus === "expired";
+    const isDnsExpired = isDnsExpiredAsset(asset);
     const isPortDiscoveryRunning = activePortDiscoveryAssetIds.has(asset.id);
     return (
       <div
@@ -1528,6 +1595,11 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
         className="group flex items-center justify-between border-b border-dotted border-[#8B0000]/20 px-4 py-3 transition-colors hover:bg-[#8B0000]/[0.035] last:border-b-0"
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
+          {canManageAssets ? (
+            <button type="button" onClick={() => toggleAssetSelection(asset.id)} aria-label={`${selectedAssetIds.has(asset.id) ? "Deselect" : "Select"} ${asset.value}`} className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border transition", selectedAssetIds.has(asset.id) ? "border-[#8B0000] bg-[#8B0000] text-white" : "border-[#8a5d33]/40 bg-white/60 text-transparent hover:border-[#8B0000]/50")}>
+              <Check className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
             asset.type === "domain" 
               ? "bg-emerald-50 text-emerald-600" 
@@ -1538,7 +1610,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
               <p className={`truncate text-sm font-semibold ${isDnsExpired ? "text-red-600" : "text-[#3d200a]"}`}>{asset.value}</p>
-              <AssetBucketChip bucket={asset.bucket} />
+              <AssetBucketChips bucket={asset.bucket} buckets={asset.buckets} />
               <RenderResolvedIpChip value={asset.value} type={asset.type} resolvedIp={asset.resolvedIp} />
               {isDnsExpired && (
                 <ActionTooltip content="The domain was not found in DNS.">
@@ -1642,7 +1714,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
   // === Render Asset Row (Leaf) ===
   const renderLeafAssetRow = (asset: typeof leafAssets[0]) => {
     const Icon = getAssetIcon(asset.type);
-    const isDnsExpired = asset.scanStatus === "expired" || asset.portDiscoveryStatus === "expired";
+    const isDnsExpired = isDnsExpiredAsset(asset);
     const isPortDiscoveryRunning = activePortDiscoveryAssetIds.has(asset.id);
     return (
       <div
@@ -1650,6 +1722,11 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
         className="group flex items-center justify-between border-b border-dotted border-[#8B0000]/20 px-4 py-3 transition-colors hover:bg-[#8B0000]/[0.035] last:border-b-0"
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
+          {canManageAssets ? (
+            <button type="button" onClick={() => toggleAssetSelection(asset.id)} aria-label={`${selectedAssetIds.has(asset.id) ? "Deselect" : "Select"} ${asset.value}`} className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border transition", selectedAssetIds.has(asset.id) ? "border-[#8B0000] bg-[#8B0000] text-white" : "border-[#8a5d33]/40 bg-white/60 text-transparent hover:border-[#8B0000]/50")}>
+              <Check className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
             asset.type === "domain"
               ? "bg-teal-50 text-teal-600"
@@ -1660,7 +1737,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
               <p className={`truncate text-sm font-semibold ${isDnsExpired ? "text-red-600" : "text-[#3d200a]"}`}>{asset.value}</p>
-              <AssetBucketChip bucket={asset.bucket} />
+              <AssetBucketChips bucket={asset.bucket} buckets={asset.buckets} />
               <RenderResolvedIpChip value={asset.value} type={asset.type} resolvedIp={asset.resolvedIp} />
               {isDnsExpired && (
                 <ActionTooltip content="The domain was not found in DNS.">
@@ -1724,9 +1801,11 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
             <ActionTooltip content="Discover subdomains">
               <button
                 type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#8B0000]/20 bg-white text-[#8B0000] opacity-0 transition-all hover:bg-[#8B0000]/8 group-hover:opacity-100 focus-visible:opacity-100"
+                onClick={(event) => handleScanSubdomains(asset.id, event)}
+                disabled={activeSubdomainDiscoveryAssetIds.has(asset.id)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#8B0000]/20 bg-white text-[#8B0000] opacity-0 transition-all hover:bg-[#8B0000]/8 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-50"
               >
-                <Network className="w-3.5 h-3.5" />
+                {activeSubdomainDiscoveryAssetIds.has(asset.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Network className="w-3.5 h-3.5" />}
               </button>
             </ActionTooltip>
           )}
@@ -1803,22 +1882,33 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
               <CountBadge count={rootAssets.length + leafAssets.length} />
             </div>
             <div className="flex items-center gap-2">
-              <Select value={bucketFilter} onValueChange={setBucketFilter}>
-                <SelectTrigger className="h-10 min-w-[168px] rounded-full border border-amber-500/20 bg-white px-4 text-xs font-bold shadow-sm">
-                  <SelectValue placeholder="All buckets" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Buckets</SelectItem>
-                  {PREDEFINED_ASSET_BUCKETS.map((bucket) => (
-                    <SelectItem key={bucket} value={bucket}>{bucket}</SelectItem>
-                  ))}
-                  {visibleBucketOptions
-                    .filter((bucket) => !PREDEFINED_ASSET_BUCKETS.includes(bucket as any))
-                    .map((bucket) => (
-                      <SelectItem key={bucket} value={bucket}>{bucket}</SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <button type="button" onClick={() => setShowFilterModal(true)} className="inline-flex h-10 items-center gap-2 rounded-full border border-[#8a5d33]/35 bg-white/70 px-4 text-xs font-bold text-[#3d200a] shadow-sm backdrop-blur transition hover:border-[#8B0000]/40 hover:bg-white">
+                <Filter className="h-3.5 w-3.5 text-[#8B0000]" />Filters
+                {activeFilterCount > 0 ? <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#8B0000] px-1.5 text-[10px] text-white">{activeFilterCount}</span> : null}
+              </button>
+              {canManageAssets ? (
+                <button type="button" onClick={() => {
+                  const visibleIds = [...filteredRoot, ...filteredLeaf].map((asset) => asset.id);
+                  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedAssetIds.has(id));
+                  setSelectedAssetIds((current) => {
+                    const next = new Set(current);
+                    visibleIds.forEach((id) => allVisibleSelected ? next.delete(id) : next.add(id));
+                    return next;
+                  });
+                }} className="inline-flex h-10 items-center gap-2 rounded-full border border-[#8a5d33]/35 bg-white/70 px-4 text-xs font-bold text-[#3d200a] shadow-sm transition hover:bg-white">
+                  <Check className="h-3.5 w-3.5 text-[#8B0000]" />Select visible
+                </button>
+              ) : null}
+              {canManageAssets && expiredAssetIds.length > 0 ? (
+                <button type="button" onClick={() => setPendingDeleteIds(expiredAssetIds)} className="inline-flex h-10 items-center gap-2 rounded-full border border-red-300/70 bg-red-50/75 px-4 text-xs font-bold text-red-700 transition hover:bg-red-100">
+                  <Trash2 className="h-3.5 w-3.5" />Delete DNS expired ({expiredAssetIds.length})
+                </button>
+              ) : null}
+              {canManageAssets && selectedAssetIds.size > 0 ? (
+                <button type="button" onClick={() => setPendingDeleteIds(Array.from(selectedAssetIds))} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#8B0000] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#730000]">
+                  <Trash2 className="h-3.5 w-3.5" />Delete selected ({selectedAssetIds.size})
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setBucketView((current) => (current === "flat" ? "grouped" : "flat"))}
@@ -1910,13 +2000,13 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                     </button>
                   )}
                   <div className="relative w-full sm:w-[260px]">
-                    <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8a5d33]/30" />
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8B0000]/65" />
                     <input
                       type="text"
                       value={rootSearch}
                       onChange={(e) => setRootSearch(e.target.value)}
                       placeholder="Search root domains..."
-                      className="w-full rounded-xl border border-amber-500/15 bg-amber-50/50 py-2 pl-9 pr-3 text-xs text-[#3d200a] placeholder:text-[#8a5d33]/30 transition-all focus:outline-none focus:ring-1 focus:ring-[#8B0000]/30"
+                      className="w-full rounded-xl border border-[#8a5d33]/35 bg-white/80 py-2.5 pl-9 pr-3 text-xs font-medium text-[#3d200a] shadow-sm placeholder:text-[#8a5d33]/55 transition-all focus:border-[#8B0000]/45 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/10"
                     />
                   </div>
                 </div>
@@ -1976,13 +2066,13 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                   className="relative w-full cursor-default sm:w-[260px]"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8a5d33]/30" />
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8B0000]/65" />
                   <input
                     type="text"
                     value={leafSearch}
                     onChange={(e) => setLeafSearch(e.target.value)}
                     placeholder="Search leaf assets..."
-                    className="w-full rounded-xl border border-amber-500/15 bg-amber-50/50 py-2 pl-9 pr-3 text-xs text-[#3d200a] placeholder:text-[#8a5d33]/30 transition-all focus:outline-none focus:ring-1 focus:ring-[#8B0000]/30"
+                    className="w-full rounded-xl border border-[#8a5d33]/35 bg-white/80 py-2.5 pl-9 pr-3 text-xs font-medium text-[#3d200a] shadow-sm placeholder:text-[#8a5d33]/55 transition-all focus:border-[#8B0000]/45 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/10"
                   />
                 </div>
               )}
@@ -2013,6 +2103,30 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
       </div>
 
     </section>
+    {showFilterModal && typeof document !== "undefined" && ReactDOM.createPortal((
+      <div className="fixed inset-0 z-[125] flex items-center justify-center bg-[#3d200a]/35 p-4 backdrop-blur-sm" onClick={() => setShowFilterModal(false)}>
+        <section role="dialog" aria-modal="true" aria-labelledby="asset-filter-title" className="w-full max-w-md overflow-hidden rounded-xl border border-[#8a5d33]/45 bg-[#fff8e8]/92 shadow-2xl ring-1 ring-white/60 backdrop-blur-2xl" onClick={(event) => event.stopPropagation()}>
+          <header className="flex items-start justify-between gap-4 border-b border-[#8a5d33]/25 px-5 py-4">
+            <div><h2 id="asset-filter-title" className="text-lg font-semibold text-[#3d200a]">Filter assets</h2><p className="mt-1 text-xs text-[#8a5d33]">Combine DNS state and bucket matching.</p></div>
+            <button type="button" onClick={() => setShowFilterModal(false)} aria-label="Close asset filters" className="rounded-lg p-2 text-[#8a5d33] transition hover:bg-white/60"><X className="h-4 w-4" /></button>
+          </header>
+          <div className="space-y-4 px-5 py-4">
+            <label className="grid gap-1.5"><span className="text-sm font-semibold text-[#3d200a]">DNS state</span><select value={dnsFilter} onChange={(event) => setDnsFilter(event.target.value as typeof dnsFilter)} className="h-10 rounded-lg border border-[#8a5d33]/35 bg-white/70 px-3 text-sm text-[#3d200a] outline-none focus:border-[#8B0000]/50"><option value="all">Any state</option><option value="expired">DNS expired</option><option value="resolved">Resolved IP</option><option value="unresolved">No resolved IP</option></select></label>
+            <label className="grid gap-1.5"><span className="text-sm font-semibold text-[#3d200a]">Bucket</span><select value={bucketFilter} onChange={(event) => setBucketFilter(event.target.value)} className="h-10 rounded-lg border border-[#8a5d33]/35 bg-white/70 px-3 text-sm text-[#3d200a] outline-none focus:border-[#8B0000]/50"><option value="all">All buckets</option>{bucketOptions.map((bucket) => <option key={bucket} value={bucket}>{bucket}</option>)}</select></label>
+            <label className="grid gap-1.5"><span className="text-sm font-semibold text-[#3d200a]">Bucket keyword</span><input value={bucketKeyword} onChange={(event) => setBucketKeyword(event.target.value)} placeholder="e.g. banking, payment, admin" className="h-10 rounded-lg border border-[#8a5d33]/35 bg-white/70 px-3 text-sm text-[#3d200a] outline-none placeholder:text-[#8a5d33]/50 focus:border-[#8B0000]/50" /></label>
+          </div>
+          <footer className="flex items-center justify-between border-t border-[#8a5d33]/25 bg-white/25 px-5 py-3.5"><button type="button" onClick={() => { setDnsFilter("all"); setBucketFilter("all"); setBucketKeyword(""); }} className="text-sm font-semibold text-[#8B0000] hover:underline">Clear filters</button><button type="button" onClick={() => setShowFilterModal(false)} className="inline-flex h-10 items-center rounded-lg bg-[#8B0000] px-4 text-sm font-semibold text-white hover:bg-[#730000]">Apply filters</button></footer>
+        </section>
+      </div>
+    ), document.body)}
+    {pendingDeleteIds && typeof document !== "undefined" && ReactDOM.createPortal((
+      <div className="fixed inset-0 z-[130] flex items-center justify-center bg-[#3d200a]/40 p-4 backdrop-blur-sm" onClick={() => !isDeletingAssets && setPendingDeleteIds(null)}>
+        <section role="alertdialog" aria-modal="true" aria-labelledby="delete-assets-title" className="w-full max-w-md overflow-hidden rounded-xl border border-red-300/70 bg-[#fff8e8]/95 shadow-2xl backdrop-blur-2xl" onClick={(event) => event.stopPropagation()}>
+          <div className="px-5 py-5"><div className="flex items-start gap-3"><span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-100 text-red-700"><TriangleAlert className="h-5 w-5" /></span><div><h2 id="delete-assets-title" className="text-lg font-semibold text-[#3d200a]">Delete {pendingDeleteIds.length} asset{pendingDeleteIds.length === 1 ? "" : "s"}?</h2><p className="mt-1 text-sm leading-6 text-[#8a5d33]">This also removes associated scans and child assets. This action cannot be undone.</p></div></div></div>
+          <footer className="flex justify-end gap-2 border-t border-[#8a5d33]/20 bg-white/25 px-5 py-3.5"><button type="button" disabled={isDeletingAssets} onClick={() => setPendingDeleteIds(null)} className="inline-flex h-10 items-center rounded-lg border border-[#8a5d33]/35 bg-white/65 px-4 text-sm font-semibold text-[#3d200a]">Cancel</button><button type="button" disabled={isDeletingAssets} onClick={() => void deleteAssets(pendingDeleteIds)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-red-700 px-4 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">{isDeletingAssets ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}Delete assets</button></footer>
+        </section>
+      </div>
+    ), document.body)}
     {canManageAssets && showAddModal && typeof document !== "undefined" && ReactDOM.createPortal((
       <div
         className="fixed inset-0 z-[120] flex items-center justify-center bg-black/35 p-4 backdrop-blur-sm"
@@ -2215,14 +2329,14 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
     ), document.body)}
     {portDiscoveryModal && typeof document !== "undefined" && ReactDOM.createPortal((
       <div
-        className="fixed inset-0 z-[128] flex items-center justify-center bg-black/35 p-4 backdrop-blur-sm"
+        className="fixed inset-0 z-[128] flex items-center justify-center bg-[#3d200a]/40 p-3 backdrop-blur-sm sm:p-5"
         onClick={closePortDiscoveryModal}
       >
         <div
-          className="w-full max-w-[min(1120px,94vw)] overflow-hidden rounded-[1.1rem] border border-slate-200 bg-white shadow-[0_26px_70px_rgba(15,23,42,0.18)]"
+          className="flex max-h-[calc(100dvh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-[#8a5d33]/45 bg-[#fff8e8]/92 shadow-[0_26px_70px_rgba(61,32,10,0.25)] ring-1 ring-white/60 backdrop-blur-2xl"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
+          <div className="border-b border-[#8a5d33]/25 px-5 py-4">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-lg font-extrabold text-[#3d200a]">Port &amp; IP Discovery</h3>
@@ -2235,7 +2349,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
               <button
                 type="button"
                 onClick={closePortDiscoveryModal}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#8a5d33]/35 bg-white/60 text-[#8a5d33] transition-colors hover:bg-white hover:text-[#3d200a]"
                 aria-label="Close port discovery modal"
               >
                 <X className="h-4 w-4" />
@@ -2251,7 +2365,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
               </div>
             </div>
           ) : (
-            <div className="grid gap-5 px-5 py-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,0.95fr)] sm:px-6">
+            <div className="grid min-h-0 gap-4 overflow-y-auto px-5 py-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(280px,0.8fr)]">
               <div className="min-h-0">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
@@ -2263,20 +2377,20 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                   <button
                     type="button"
                     onClick={addPortDiscoveryEntry}
-                    className="inline-flex items-center gap-2 rounded-full border border-amber-300/40 bg-[#fff7ea] px-3 py-1.5 text-xs font-bold text-[#8B0000] transition-colors hover:bg-amber-50"
+                    className="inline-flex items-center gap-2 rounded-lg border border-[#8a5d33]/30 bg-white/55 px-3 py-2 text-xs font-bold text-[#8B0000] transition-colors hover:bg-white"
                   >
                     <PlusCircle className="h-3.5 w-3.5" />
                     Add Port
                   </button>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-[#fcfbf8] p-3">
-                  <div className="max-h-[28rem] overflow-y-auto pr-1">
+                <div className="rounded-xl border border-[#8a5d33]/25 bg-white/35 p-2.5 backdrop-blur">
+                  <div className="max-h-[min(28rem,55dvh)] overflow-y-auto pr-1">
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                       {portDiscoveryEntries.map((entry, index) => (
                         <div
                           key={entry.id}
-                          className="rounded-lg border border-slate-200 bg-white p-3 shadow-[0_1px_0_rgba(15,23,42,0.02)]"
+                          className="rounded-lg border border-[#8a5d33]/20 bg-white/55 p-3 shadow-sm"
                         >
                           <div className="flex items-start gap-3">
                             <input
@@ -2291,7 +2405,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                                   type="text"
                                   value={entry.title}
                                   onChange={(e) => updatePortDiscoveryEntry(entry.id, { title: e.target.value })}
-                                  className="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-[#3d200a] outline-none transition-all focus:border-[#8B0000]/35 focus:ring-2 focus:ring-[#8B0000]/15"
+                                  className="h-9 min-w-0 flex-1 rounded-lg border border-[#8a5d33]/30 bg-white/65 px-3 text-sm font-semibold text-[#3d200a] outline-none transition-all focus:border-[#8B0000]/40 focus:ring-2 focus:ring-[#8B0000]/10"
                                   placeholder="Service title"
                                 />
                                 <input
@@ -2306,7 +2420,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                                   ref={(node) => {
                                     portDiscoveryListInputRefs.current[index] = node;
                                   }}
-                                  className="h-10 w-[92px] rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-[#3d200a] outline-none transition-all focus:border-[#8B0000]/35 focus:ring-2 focus:ring-[#8B0000]/15"
+                                  className="h-9 w-[76px] rounded-lg border border-[#8a5d33]/30 bg-white/65 px-3 text-sm font-bold text-[#3d200a] outline-none transition-all focus:border-[#8B0000]/40 focus:ring-2 focus:ring-[#8B0000]/10"
                                   placeholder="443"
                                 />
                               </div>
@@ -2348,13 +2462,11 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
               </div>
 
               <div className="flex min-h-0 flex-col gap-4">
-                <div className="rounded-xl border border-slate-200 bg-[#fcfbf8] p-4">
+                <div className="rounded-xl border border-[#8a5d33]/25 bg-white/40 p-4 backdrop-blur">
                   <h4 className="text-sm font-extrabold text-[#3d200a]">Probe settings</h4>
                   <div className="mt-4 space-y-4">
                     <label className="block">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#8a5d33]/65">
-                        Probe batch size
-                      </span>
+                      <span className="flex items-center gap-2 text-xs font-bold text-[#3d200a]">Probe batch size<ActionTooltip content="How many ports are tested concurrently. Higher values finish faster but use more network and CPU capacity."><span className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full border border-[#8a5d33]/30 bg-white/55 text-[#8B0000]"><Info className="h-3 w-3" /></span></ActionTooltip></span>
                       <input
                         type="text"
                         inputMode="numeric"
@@ -2365,7 +2477,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                           }
                         }}
                         onFocus={(e) => e.currentTarget.select()}
-                        className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-[#3d200a] outline-none transition-all focus:border-[#8B0000]/35 focus:ring-2 focus:ring-[#8B0000]/15"
+                        className="mt-2 h-10 w-full rounded-lg border border-[#8a5d33]/30 bg-white/65 px-3 text-sm font-semibold text-[#3d200a] outline-none transition-all focus:border-[#8B0000]/40 focus:ring-2 focus:ring-[#8B0000]/10"
                         placeholder={String(DEFAULT_PORT_DISCOVERY_PROBE_BATCH_SIZE)}
                       />
                       <span className="mt-1 block text-[11px] font-medium text-[#8a5d33]/70">
@@ -2374,9 +2486,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                     </label>
 
                     <label className="block">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#8a5d33]/65">
-                        Probe timeout (ms)
-                      </span>
+                      <span className="flex items-center gap-2 text-xs font-bold text-[#3d200a]">Probe timeout (ms)<ActionTooltip content="Maximum time to wait for one port to respond. Increase it for slower or distant networks; lower it for faster scans."><span className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full border border-[#8a5d33]/30 bg-white/55 text-[#8B0000]"><Info className="h-3 w-3" /></span></ActionTooltip></span>
                       <input
                         type="text"
                         inputMode="numeric"
@@ -2387,7 +2497,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                           }
                         }}
                         onFocus={(e) => e.currentTarget.select()}
-                        className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-[#3d200a] outline-none transition-all focus:border-[#8B0000]/35 focus:ring-2 focus:ring-[#8B0000]/15"
+                        className="mt-2 h-10 w-full rounded-lg border border-[#8a5d33]/30 bg-white/65 px-3 text-sm font-semibold text-[#3d200a] outline-none transition-all focus:border-[#8B0000]/40 focus:ring-2 focus:ring-[#8B0000]/10"
                         placeholder={String(DEFAULT_PORT_DISCOVERY_PROBE_TIMEOUT_MS)}
                       />
                       <span className="mt-1 block text-[11px] font-medium text-[#8a5d33]/70">
@@ -2408,40 +2518,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                   )}
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-[#fcfbf8] p-4">
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-extrabold text-[#3d200a]">Port ranges</h4>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500"
-                          aria-label="About port ranges"
-                        >
-                          <Info className="h-3 w-3" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent>port ranges only available for verified domains.</TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <div className="mt-3 rounded-lg border border-dashed border-slate-200 bg-white px-3 py-3">
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={false}
-                        disabled
-                        readOnly
-                        className="h-4 w-4 rounded border-slate-300 text-slate-400"
-                      />
-                      <div>
-                        <p className="text-sm font-semibold text-slate-500">Port ranges are disabled for now</p>
-                        <p className="mt-1 text-xs text-slate-400">Use the editable checklist above to control discovery.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-[#fcfbf8] p-4">
+                <div className="rounded-xl border border-[#8a5d33]/25 bg-white/40 p-4 backdrop-blur">
                   <h4 className="text-sm font-extrabold text-[#3d200a]">Run summary</h4>
                   <dl className="mt-3 space-y-2 text-sm text-[#5b3a1f]">
                     <div className="flex items-center justify-between gap-3">
@@ -2477,7 +2554,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                     hasInvalidPortDiscoveryBatchSize ||
                     hasInvalidPortDiscoveryTimeout
                   }
-                  className="mt-auto inline-flex h-11 w-full items-center justify-center rounded-full bg-[#1e3a8a] text-sm font-bold text-white transition-colors hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:opacity-45"
+                  className="mt-auto inline-flex h-11 w-full items-center justify-center rounded-lg bg-[#8B0000] text-sm font-bold text-white transition-colors hover:bg-[#730000] disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   {isStartingPortDiscovery ? (
                     <>
@@ -2830,7 +2907,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                         <div className="min-w-0">
                           <p className="truncate text-[15px] font-semibold leading-6 text-[#3d200a]">{asset.value}</p>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
-                            <AssetBucketChip bucket={asset.bucket} />
+                            <AssetBucketChips bucket={asset.bucket} buckets={(asset as any).buckets} />
                             {renderPortChips(asset.openPorts)}
                           </div>
                         </div>

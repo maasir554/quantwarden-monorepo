@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { refreshScanBatch } from "@/lib/scan-batch-server";
+import { inferAssetBuckets } from "@/lib/asset-buckets";
 
 function getAssetType(value: string): "domain" | "ip" | "unknown" {
   const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
@@ -79,17 +80,22 @@ export async function runSubdomainDiscoveryItem(input: RunSubdomainDiscoveryItem
   const now = new Date();
   let newCount = 0;
 
-  const newAssets = uniqueSubs.map((sub) => ({
-    id: crypto.randomUUID(),
-    value: sub,
-    type: getAssetType(sub),
-    isRoot: false,
-    organizationId: orgId,
-    verified: false,
-    openPorts: JSON.stringify([{ number: 443, protocol: "tcp" }]),
-    createdAt: now,
-    parentId: assetId,
-  }));
+  const newAssets = uniqueSubs.map((sub) => {
+    const buckets = inferAssetBuckets(sub);
+    return {
+      id: crypto.randomUUID(),
+      value: sub,
+      type: getAssetType(sub),
+      isRoot: false,
+      organizationId: orgId,
+      verified: false,
+      openPorts: JSON.stringify([{ number: 443, protocol: "tcp" }]),
+      bucket: buckets[0],
+      buckets: JSON.stringify(buckets),
+      createdAt: now,
+      parentId: assetId,
+    };
+  });
 
   // Pinpoint exactly which subdomains are newly discovered by cross-referencing with the database
   const existingRecords = await prisma.asset.findMany({

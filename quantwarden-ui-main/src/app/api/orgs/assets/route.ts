@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getOrgMemberAccess } from "@/lib/org-scan-permissions";
-import { inferAssetBucket, normalizeAssetBucket } from "@/lib/asset-buckets";
+import { inferAssetBuckets, normalizeAssetBucket, normalizeAssetBuckets } from "@/lib/asset-buckets";
 import { normalizeAssetOpenPorts } from "@/lib/port-discovery";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     let assets: any[] = [];
     try {
       assets = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id, value, type, "isRoot", "parentId", "resolvedIp", "openPorts", bucket, "createdAt", "scanStatus", "lastScanDate", "portDiscoveryStatus", "lastPortDiscoveryDate" FROM "asset" WHERE "organizationId" = $1 ORDER BY "createdAt" DESC`,
+        `SELECT id, value, type, "isRoot", "parentId", "resolvedIp", "openPorts", bucket, buckets, "createdAt", "scanStatus", "lastScanDate", "portDiscoveryStatus", "lastPortDiscoveryDate" FROM "asset" WHERE "organizationId" = $1 ORDER BY "createdAt" DESC`,
         orgId
       );
     } catch(err) {
@@ -53,7 +53,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       assets: assets.map((asset) => ({
         ...asset,
-        bucket: normalizeAssetBucket(asset.bucket || inferAssetBucket(asset.value)),
+        buckets: normalizeAssetBuckets(asset.buckets || asset.bucket, asset.value),
+        bucket: normalizeAssetBuckets(asset.buckets || asset.bucket, asset.value)[0],
       })),
     });
   } catch (error) {
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { orgId, value, type, isRoot, parentId, openPorts, bucket } = await req.json();
+    const { orgId, value, type, isRoot, parentId, openPorts, bucket, buckets } = await req.json();
 
     if (!orgId || !value) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -86,14 +87,15 @@ export async function POST(req: NextRequest) {
     const assetId = crypto.randomUUID();
     let query = "";
     const normalizedOpenPorts = normalizeAssetOpenPorts(openPorts);
-    const normalizedBucket = normalizeAssetBucket(bucket || inferAssetBucket(value));
-    const params: any[] = [assetId, value, type, isRoot, orgId, false, JSON.stringify(normalizedOpenPorts), normalizedBucket, new Date()];
+    const normalizedBuckets = buckets ? normalizeAssetBuckets(buckets, value) : bucket ? [normalizeAssetBucket(bucket)] : inferAssetBuckets(value);
+    const normalizedBucket = normalizedBuckets[0];
+    const params: any[] = [assetId, value, type, isRoot, orgId, false, JSON.stringify(normalizedOpenPorts), normalizedBucket, JSON.stringify(normalizedBuckets), new Date()];
     
     if (parentId) {
-      query = `INSERT INTO "asset" (id, value, type, "isRoot", "organizationId", verified, "openPorts", bucket, "createdAt", "parentId") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`;
+      query = `INSERT INTO "asset" (id, value, type, "isRoot", "organizationId", verified, "openPorts", bucket, buckets, "createdAt", "parentId") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`;
       params.push(parentId);
     } else {
-      query = `INSERT INTO "asset" (id, value, type, "isRoot", "organizationId", verified, "openPorts", bucket, "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`;
+      query = `INSERT INTO "asset" (id, value, type, "isRoot", "organizationId", verified, "openPorts", bucket, buckets, "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`;
     }
 
     try {
@@ -101,7 +103,7 @@ export async function POST(req: NextRequest) {
     } catch (dbError: any) {
       const missingNewColumns =
         typeof dbError?.message === "string" &&
-        (dbError.message.includes("openPorts") || dbError.message.includes("resolvedIp") || dbError.message.includes("bucket"));
+        (dbError.message.includes("openPorts") || dbError.message.includes("resolvedIp") || dbError.message.includes("bucket") || dbError.message.includes("buckets"));
 
       if (missingNewColumns) {
         const legacyParams: any[] = [assetId, value, type, isRoot, orgId, false, new Date()];
@@ -116,7 +118,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, asset: { id: assetId, bucket: normalizedBucket } });
+    return NextResponse.json({ success: true, asset: { id: assetId, bucket: normalizedBucket, buckets: normalizedBuckets } });
   } catch (error) {
     console.error("Asset insert error:", error);
     return NextResponse.json(
@@ -137,10 +139,10 @@ export async function DELETE(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
+    const ids = Array.from(new Set((searchParams.get("ids") || searchParams.get("id") || "").split(",").map((id) => id.trim()).filter(Boolean)));
     const orgId = searchParams.get("orgId");
 
-    if (!id || !orgId) {
+    if (ids.length === 0 || !orgId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -149,9 +151,14 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden: You do not have asset management permission." }, { status: 403 });
     }
 
-    await prisma.$executeRawUnsafe(`DELETE FROM "asset" WHERE id = $1 AND "organizationId" = $2`, id, orgId);
+    if (ids.length > 500) return NextResponse.json({ error: "Too many assets selected." }, { status: 400 });
+    const deleted = await prisma.$executeRawUnsafe(
+      `DELETE FROM "asset" WHERE id = ANY($1::text[]) AND "organizationId" = $2`,
+      ids,
+      orgId
+    );
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, deleted });
   } catch (error) {
     console.error("Asset delete error:", error);
     return NextResponse.json(
@@ -171,7 +178,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { orgId, id, openPorts, bucket } = await req.json();
+    const { orgId, id, openPorts, bucket, buckets } = await req.json();
 
     if (!orgId || !id) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -183,22 +190,24 @@ export async function PATCH(req: NextRequest) {
     }
 
     const hasOpenPortsUpdate = Array.isArray(openPorts);
-    const hasBucketUpdate = typeof bucket === "string";
+    const hasBucketUpdate = typeof bucket === "string" || Array.isArray(buckets);
 
     if (!hasOpenPortsUpdate && !hasBucketUpdate) {
       return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
     }
 
     const normalizedOpenPorts = hasOpenPortsUpdate ? normalizeAssetOpenPorts(openPorts) : null;
-    const normalizedBucket = hasBucketUpdate ? normalizeAssetBucket(bucket) : null;
+    const normalizedBuckets = hasBucketUpdate ? normalizeAssetBuckets(buckets || bucket) : null;
+    const normalizedBucket = normalizedBuckets?.[0] || null;
     try {
       if (hasOpenPortsUpdate && hasBucketUpdate) {
         await prisma.$executeRawUnsafe(
           `UPDATE "asset"
-           SET "openPorts" = $1, bucket = $2
-           WHERE id = $3 AND "organizationId" = $4`,
+           SET "openPorts" = $1, bucket = $2, buckets = $3
+           WHERE id = $4 AND "organizationId" = $5`,
           JSON.stringify(normalizedOpenPorts),
           normalizedBucket,
+          JSON.stringify(normalizedBuckets),
           id,
           orgId
         );
@@ -214,9 +223,10 @@ export async function PATCH(req: NextRequest) {
       } else {
         await prisma.$executeRawUnsafe(
           `UPDATE "asset"
-           SET bucket = $1
-           WHERE id = $2 AND "organizationId" = $3`,
+           SET bucket = $1, buckets = $2
+           WHERE id = $3 AND "organizationId" = $4`,
           normalizedBucket,
+          JSON.stringify(normalizedBuckets),
           id,
           orgId
         );
@@ -258,7 +268,7 @@ export async function PATCH(req: NextRequest) {
       asset: {
         id,
         ...(normalizedOpenPorts ? { openPorts: normalizedOpenPorts } : {}),
-        ...(normalizedBucket ? { bucket: normalizedBucket } : {}),
+        ...(normalizedBucket ? { bucket: normalizedBucket, buckets: normalizedBuckets } : {}),
       },
     });
   } catch (error) {
