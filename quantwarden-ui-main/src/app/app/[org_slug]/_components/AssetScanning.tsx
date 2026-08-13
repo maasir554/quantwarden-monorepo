@@ -136,7 +136,6 @@ export default function AssetScanning({ org, isAdmin, canScan }: AssetScanningPr
   const [actionError, setActionError] = useState<string | null>(null);
   const [isStoppingBatch, setIsStoppingBatch] = useState(false);
   const [stableAssetCategory, setStableAssetCategory] = useState<Record<string, "successful" | "timeout" | "dnsExpired" | "noTls" | "unscanned">>({});
-  const [isHeaderCompact, setIsHeaderCompact] = useState(false);
   const [scanOptionsModal, setScanOptionsModal] = useState<{
     type: "single" | "group" | "full";
     assetIds: string[];
@@ -146,7 +145,6 @@ export default function AssetScanning({ org, isAdmin, canScan }: AssetScanningPr
   const [scanScheduleDate, setScanScheduleDate] = useState("");
   const [scanScheduleTime, setScanScheduleTime] = useState("");
   const [isSchedulingScan, setIsSchedulingScan] = useState(false);
-  const listScrollRef = useRef<HTMLDivElement | null>(null);
   const activitySnapshotRef = useRef<{
     activeCount: number;
     latestCompletedBatchId: string | null;
@@ -215,20 +213,6 @@ export default function AssetScanning({ org, isAdmin, canScan }: AssetScanningPr
       startStreamOnActive: true,
     });
   }, [activity?.activeBatches.length, checkForActiveScans, connected, hydrated]);
-
-  useEffect(() => {
-    const container = listScrollRef.current;
-    if (!container) return;
-
-    const onScroll = () => {
-      const top = container.scrollTop;
-      setIsHeaderCompact((prev) => (prev ? top > 42 : top > 68));
-    };
-
-    onScroll();
-    container.addEventListener("scroll", onScroll, { passive: true });
-    return () => container.removeEventListener("scroll", onScroll);
-  }, []);
 
   useEffect(() => {
     if (!hydrated || !activity) return;
@@ -964,271 +948,121 @@ export default function AssetScanning({ org, isAdmin, canScan }: AssetScanningPr
 
   return (
     <>
-    <div className="h-full flex flex-col bg-white/40 backdrop-blur-xl border border-white/40 rounded-3xl shadow-2xl overflow-hidden ring-1 ring-amber-500/20">
-      <div className={`${isHeaderCompact ? "px-6 py-2 sm:px-8 sm:py-2" : "p-6 sm:p-8"} bg-linear-to-br from-white/80 to-white/40 border-b border-amber-500/10 shrink-0 transition-all duration-300`}>
-        <div className={`flex flex-col ${isHeaderCompact ? "gap-1" : "gap-6"} transition-all duration-300`}>
-          <div className={`flex ${isHeaderCompact ? "items-center" : "items-start"} gap-4 transition-all duration-300`}>
-            <div className={`${isHeaderCompact ? "w-10 h-10 rounded-xl" : "w-12 h-12 rounded-2xl"} bg-linear-to-br from-[#8B0000] to-red-600 flex items-center justify-center shrink-0 shadow-lg shadow-red-900/20 transition-all duration-300`}>
-              <ShieldCheck className={`${isHeaderCompact ? "w-5 h-5" : "w-6 h-6"} text-white transition-all duration-300`} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className={`${isHeaderCompact ? "text-xl" : "text-2xl"} font-black text-[#3d200a] tracking-tight transition-all duration-300`}>OpenSSL TLS Scanning</h2>
-                {isHeaderCompact && (
-                  <div className="flex items-center gap-1.5">
-                    <Link
-                      href={`/app/${org.slug}/explore`}
-                      data-tip="Open Explorer"
-                      className="action-tip inline-flex h-9 w-9 items-center justify-center rounded-full border border-amber-300 bg-linear-to-r from-[#f5cf58] to-[#eab308] text-[#5a3500] shadow-sm transition-all hover:brightness-105"
-                    >
-                      <Telescope className="h-4 w-4" />
-                    </Link>
-                    {canScan && activeBatch && (
-                      <button
-                        onClick={() => void handleStopBatch(activeBatch.id)}
-                        disabled={isStoppingActiveBatch}
-                        data-tip="Stop Active Scan"
-                        className="action-tip inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#991b1b] text-white shadow-[0_12px_28px_rgba(127,29,29,0.28)] transition-all hover:bg-[#7f1d1d] disabled:opacity-50"
-                      >
-                        {isStoppingActiveBatch ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
-                      </button>
-                    )}
-                    {canScan && (
-                      <>
-                        <button
-                          onClick={() => void handleGroupScan()}
-                          disabled={isCreatingAnyBatch || selectedAssetIds.length < 2}
-                          data-tip={orgScanLocked ? "Queue Group" : "Scan Group"}
-                          className="action-tip inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#8B0000]/20 bg-white/80 text-[#8B0000] transition-all hover:bg-white disabled:opacity-50"
-                        >
-                          {isCreatingGroupScan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Fingerprint className="h-4 w-4" />}
-                        </button>
-                        <button
-                          onClick={() => void handleScanAll()}
-                          disabled={isCreatingAnyBatch}
-                          data-tip={isFullScanActive ? `Full Scan Running (${(fullScan?.completedAssets ?? 0) + (fullScan?.failedAssets ?? 0)}/${fullScan?.totalAssets ?? 0})` : orgScanLocked ? "Queue All Assets" : "Scan All Assets"}
-                          className="action-tip inline-flex h-9 w-9 items-center justify-center rounded-full bg-linear-to-r from-[#8B0000] to-[rgb(110,0,0)] text-white transition-colors hover:from-[#9f0000] hover:to-[#7a0000] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {isFullScanActive || isCreatingFullScan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-              <p className={`${isHeaderCompact ? "hidden" : "text-sm"} font-medium text-[#8a5d33]/80 mt-1 max-w-xl leading-relaxed transition-all duration-300`}>
-                Deep-profile your domains with OpenSSL to inspect certificates, negotiated groups, and target cipher preference order.
-              </p>
-              {!isHeaderCompact && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Link
-                  href={`/app/${org.slug}/explore`}
-                  className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-linear-to-r from-[#f5cf58] to-[#eab308] px-5 py-2 text-sm font-bold text-[#5a3500] shadow-sm transition-all hover:brightness-105"
-                >
-                  <Telescope className="h-4 w-4" />
-                  Open Explorer
-                </Link>
-                {canScan && (
-                  <>
-                  {activeBatch && (
-                    <button
-                      onClick={() => void handleStopBatch(activeBatch.id)}
-                      disabled={isStoppingActiveBatch}
-                      className="inline-flex items-center gap-2 rounded-full bg-[#991b1b] px-5 py-2.5 text-sm font-bold text-white shadow-[0_16px_34px_rgba(127,29,29,0.24)] transition-all hover:bg-[#7f1d1d] disabled:opacity-50"
-                    >
-                      {isStoppingActiveBatch ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Square className="w-4 h-4" />
-                      )}
-                      Stop Active Scan
-                    </button>
-                  )}
-                  <div className="relative group">
-                    <button
-                      onClick={() => void handleGroupScan()}
-                      disabled={isCreatingAnyBatch || selectedAssetIds.length < 2}
-                      className="inline-flex items-center gap-2 rounded-full border border-[#8B0000]/20 bg-white/80 px-5 py-2.5 text-sm font-bold text-[#8B0000] transition-all hover:bg-white disabled:opacity-50"
-                    >
-                      {isCreatingGroupScan ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Fingerprint className="w-4 h-4" />
-                      )}
-                      {isCreatingGroupScan
-                        ? "Starting Group Scan..."
-                        : selectedAssetIds.length >= 2
-                          ? orgScanLocked
-                            ? `Queue Group (${selectedAssetIds.length})`
-                            : `Scan Group (${selectedAssetIds.length})`
-                          : orgScanLocked ? "Queue Group" : "Scan Group"}
-                    </button>
-                    {selectedAssetIds.length < 2 && !isCreatingGroupScan && (
-                      <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-[#8B0000]/25 bg-white px-2.5 py-1 text-[11px] font-semibold text-[#8B0000] shadow-md group-hover:inline-block">
-                        Select at least 2 assets
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => void handleScanAll()}
-                    disabled={isCreatingAnyBatch}
-                    className="inline-flex items-center gap-2 rounded-full bg-linear-to-r from-[#8B0000] to-[rgb(110,0,0)] px-6 py-2.5 text-sm font-bold text-white transition-colors hover:from-[#9f0000] hover:to-[#7a0000] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {isFullScanActive || isCreatingFullScan ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Zap className="w-4 h-4" />
-                    )}
-                    {isCreatingFullScan
-                      ? "Starting Full Scan..."
-                      : isFullScanActive
-                      ? `Full Scan Running (${(fullScan?.completedAssets ?? 0) + (fullScan?.failedAssets ?? 0)}/${fullScan?.totalAssets ?? 0})`
-                      : orgScanLocked ? "Queue All Assets" : "Scan All Assets"}
-                  </button>
-                  </>
-                )}
-              </div>
-              )}
-              {canScan && (fullScan || groupScan) && (
-                <p className={`${isHeaderCompact ? "hidden" : "mt-2 text-[11px]"} font-bold text-[#8a5d33]/65`}>
-                  {fullScan
-                    ? `Full scan started ${formatDistanceToNow(new Date(fullScan.createdAt), { addSuffix: true })}`
-                    : groupScan
-                      ? `Group scan started ${formatDistanceToNow(new Date(groupScan.createdAt), { addSuffix: true })}`
-                      : ""}
-                </p>
-              )}
-            </div>
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-[#8a5d33]/30 bg-white/45 shadow-sm backdrop-blur-xl">
+      <header className="shrink-0 border-b border-[#8a5d33]/20 bg-white/55 px-5 py-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-[#3d200a]">
+              <ShieldCheck className="h-5 w-5 text-[#8B0000]" />
+              OpenSSL TLS Scanning
+            </h2>
+            <p className="mt-1 text-xs text-[#8a5d33]">Inspect certificates, negotiated groups, and cipher preference.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href={`/app/${org.slug}/explore`} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#8a5d33]/30 bg-white/70 px-3 text-xs font-semibold text-[#3d200a] transition hover:bg-white">
+              <Telescope className="h-3.5 w-3.5 text-[#8B0000]" />Explorer
+            </Link>
+            {canScan && activeBatch ? (
+              <button onClick={() => void handleStopBatch(activeBatch.id)} disabled={isStoppingActiveBatch} className="inline-flex h-9 items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-3 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50">
+                {isStoppingActiveBatch ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}Stop scan
+              </button>
+            ) : null}
+            {canScan ? (
+              <>
+                <button onClick={() => void handleGroupScan()} disabled={isCreatingAnyBatch || selectedAssetIds.length < 2} title={selectedAssetIds.length < 2 ? "Select at least two assets" : undefined} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#8B0000]/25 bg-white/70 px-3 text-xs font-semibold text-[#8B0000] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-45">
+                  {isCreatingGroupScan ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Fingerprint className="h-3.5 w-3.5" />}
+                  {orgScanLocked ? "Queue selected" : "Scan selected"}{selectedAssetIds.length > 0 ? ` (${selectedAssetIds.length})` : ""}
+                </button>
+                <button onClick={() => void handleScanAll()} disabled={isCreatingAnyBatch} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#8B0000] px-3 text-xs font-semibold text-white transition hover:bg-[#730000] disabled:cursor-not-allowed disabled:opacity-50">
+                  {isFullScanActive || isCreatingFullScan ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                  {isFullScanActive ? `Scanning ${(fullScan?.completedAssets ?? 0) + (fullScan?.failedAssets ?? 0)}/${fullScan?.totalAssets ?? 0}` : orgScanLocked ? "Queue all" : "Scan all"}
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
-
         {actionError && (
-          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
             {actionError}
           </div>
         )}
         {activity?.lock.active && (
-          <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+          <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
             {lockMessage}
           </div>
         )}
         {!canScan && (
-          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
             Your role does not currently have permission to launch OpenSSL scans.
           </div>
         )}
-      </div>
+      </header>
 
-      <div className={`${isHeaderCompact ? "px-5 py-1.5" : "px-6 py-4"} bg-white/40 border-b border-amber-500/10 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between ${isHeaderCompact ? "gap-2" : "gap-4"} transition-all duration-300`}>
-        <div className={`relative w-full ${isHeaderCompact ? "max-w-[340px]" : "max-w-sm"} transition-all duration-300`}>
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8a5d33]/40" />
+      <div className="flex shrink-0 flex-col gap-3 border-b border-[#8a5d33]/20 bg-white/30 px-5 py-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="relative w-full xl:max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8B0000]/60" />
           <input
             type="text"
             placeholder="Search domains..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-white/50 border border-amber-500/20 rounded-xl text-sm font-medium text-[#3d200a] placeholder:text-[#8a5d33]/40 focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all"
+            className="h-9 w-full rounded-lg border border-[#8a5d33]/35 bg-white/75 pl-9 pr-3 text-sm font-medium text-[#3d200a] outline-none placeholder:text-[#8a5d33]/55 focus:border-[#8B0000]/45 focus:ring-2 focus:ring-[#8B0000]/10"
           />
         </div>
 
-        <div className={`flex items-center overflow-x-auto px-1 sm:px-0 scrollbar-hide shrink-0 ${isHeaderCompact ? "gap-0.5 sm:gap-1" : "gap-1 sm:gap-2"} transition-all duration-300`}>
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-hide">
           <button
             onClick={() => setFilterType("all")}
-            className={`flex flex-col items-center px-3 py-1.5 rounded-xl transition-all outline-none ${filterType === "all" ? "bg-[#8B0000]/7" : "hover:bg-black/5"}`}
+            className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition ${filterType === "all" ? "bg-[#8B0000] text-white" : "text-[#3d200a] hover:bg-white/60"}`}
           >
-            <span className="text-[9px] uppercase tracking-widest font-bold text-[#8a5d33]/50">Inventory</span>
-            {loading ? (
-              <span className="scan-stat-skeleton mt-1 h-4 w-7 rounded-md" aria-label="Loading inventory" />
-            ) : (
-              <span className="text-sm font-black text-[#3d200a]">{totalDiscovered}</span>
-            )}
+            All <span className={filterType === "all" ? "text-white/75" : "text-[#8a5d33]"}>{loading ? "–" : totalDiscovered}</span>
           </button>
-
-          <div className="w-px h-6 bg-amber-500/20 hidden sm:block mx-1"></div>
 
           <button
             onClick={() => setFilterType("successful")}
-            className={`flex flex-col items-center px-3 py-1.5 rounded-xl transition-all outline-none ${filterType === "successful" ? "bg-emerald-500/10" : "hover:bg-black/5"}`}
+            className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition ${filterType === "successful" ? "bg-emerald-700 text-white" : "text-[#3d200a] hover:bg-white/60"}`}
           >
-            <span className="text-[9px] uppercase tracking-widest font-bold text-[#8a5d33]/50">Successful</span>
-            {loading ? (
-              <span className="scan-stat-skeleton mt-1 h-4 w-7 rounded-md" aria-label="Loading successful count" />
-            ) : (
-              <span className="text-sm font-black text-emerald-600">{scanSuccessful}</span>
-            )}
+            Successful <span className={filterType === "successful" ? "text-white/75" : "text-emerald-700"}>{loading ? "–" : scanSuccessful}</span>
           </button>
-
-          <div className="w-px h-6 bg-amber-500/20 hidden sm:block mx-1"></div>
 
           <button
             onClick={() => setFilterType("timeout")}
-            className={`flex flex-col items-center px-3 py-1.5 rounded-xl transition-all outline-none ${filterType === "timeout" ? "bg-red-500/10" : "hover:bg-black/5"}`}
+            title="The target did not respond before the scan deadline"
+            className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition ${filterType === "timeout" ? "bg-red-700 text-white" : "text-[#3d200a] hover:bg-white/60"}`}
           >
-            <span
-              className="text-[9px] uppercase tracking-widest font-bold text-[#8a5d33]/50"
-              title="Timeout Possibly Port Not Open"
-            >
-              Timeout
-            </span>
-            {loading ? (
-              <span className="scan-stat-skeleton mt-1 h-4 w-7 rounded-md" aria-label="Loading timeout count" />
-            ) : (
-              <span className="text-sm font-black text-red-600">{scanTimeout}</span>
-            )}
+            Timeout <span className={filterType === "timeout" ? "text-white/75" : "text-red-700"}>{loading ? "–" : scanTimeout}</span>
           </button>
-
-          <div className="w-px h-6 bg-amber-500/20 hidden sm:block mx-1"></div>
 
           <button
             onClick={() => setFilterType("dnsExpired")}
-            className={`flex flex-col items-center px-3 py-1.5 rounded-xl transition-all outline-none ${filterType === "dnsExpired" ? "bg-red-500/10" : "hover:bg-black/5"}`}
+            className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition ${filterType === "dnsExpired" ? "bg-red-700 text-white" : "text-[#3d200a] hover:bg-white/60"}`}
           >
-            <span className="text-[9px] uppercase tracking-widest font-bold text-[#8a5d33]/50">DNS Expired</span>
-            {loading ? (
-              <span className="scan-stat-skeleton mt-1 h-4 w-7 rounded-md" aria-label="Loading DNS expired count" />
-            ) : (
-              <span className="text-sm font-black text-red-700">{dnsExpired}</span>
-            )}
+            DNS expired <span className={filterType === "dnsExpired" ? "text-white/75" : "text-red-700"}>{loading ? "–" : dnsExpired}</span>
           </button>
-
-          <div className="w-px h-6 bg-amber-500/20 hidden sm:block mx-1"></div>
 
           <button
             onClick={() => setFilterType("noTls")}
-            className={`flex flex-col items-center px-3 py-1.5 rounded-xl transition-all outline-none ${filterType === "noTls" ? "bg-red-500/10" : "hover:bg-black/5"}`}
+            className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition ${filterType === "noTls" ? "bg-red-700 text-white" : "text-[#3d200a] hover:bg-white/60"}`}
           >
-            <span className="text-[9px] uppercase tracking-widest font-bold text-[#8a5d33]/50">No TLS</span>
-            {loading ? (
-              <span className="scan-stat-skeleton mt-1 h-4 w-7 rounded-md" aria-label="Loading no TLS count" />
-            ) : (
-              <span className="text-sm font-black text-red-700">{noTls}</span>
-            )}
+            No TLS <span className={filterType === "noTls" ? "text-white/75" : "text-red-700"}>{loading ? "–" : noTls}</span>
           </button>
-
-          <div className="w-px h-6 bg-amber-500/20 hidden sm:block mx-1"></div>
 
           <button
             onClick={() => setFilterType("unscanned")}
-            className={`flex flex-col items-center px-3 py-1.5 rounded-xl transition-all outline-none ${filterType === "unscanned" ? "bg-amber-500/10" : "hover:bg-black/5"}`}
+            className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition ${filterType === "unscanned" ? "bg-amber-700 text-white" : "text-[#3d200a] hover:bg-white/60"}`}
           >
-            <span className="text-[9px] uppercase tracking-widest font-bold text-[#8a5d33]/50">Unscanned</span>
-            {loading ? (
-              <span className="scan-stat-skeleton mt-1 h-4 w-7 rounded-md" aria-label="Loading unscanned count" />
-            ) : (
-              <span className="text-sm font-black text-amber-600">{unscanned}</span>
-            )}
+            Unscanned <span className={filterType === "unscanned" ? "text-white/75" : "text-amber-700"}>{loading ? "–" : unscanned}</span>
           </button>
         </div>
 
         {canScan && (
-          <div className="flex items-center gap-2 rounded-2xl bg-white/70 px-3 py-2 text-xs font-bold text-[#8a5d33]">
-            <span className="uppercase tracking-widest text-[#8a5d33]/55">Selected</span>
-            <span className="rounded-full bg-[#8B0000]/8 px-2 py-1 text-[#8B0000]">{selectedAssetIds.length}</span>
+          <div className="flex h-8 shrink-0 items-center gap-2 rounded-lg border border-[#8a5d33]/25 bg-white/60 px-2.5 text-xs font-semibold text-[#8a5d33]">
+            Selected <span className="text-[#8B0000]">{selectedAssetIds.length}</span>
           </div>
         )}
       </div>
 
-      <div ref={listScrollRef} className="flex-1 overflow-y-auto p-4 space-y-2">
+      <div className="flex-1 space-y-2 overflow-y-auto p-4">
         {loading ? (
           <div className="flex items-center justify-center p-12">
             <Loader2 className="w-8 h-8 text-[#8B0000] animate-spin" />
