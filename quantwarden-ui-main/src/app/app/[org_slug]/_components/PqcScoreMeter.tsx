@@ -7,12 +7,34 @@ interface PqcScoreMeterProps {
   showValue?: boolean;
 }
 
+const METER_CENTER_X = 110;
+const METER_CENTER_Y = 105;
+const METER_RADIUS = 85;
+
+// These boundaries must stay aligned with calculatePqcScore():
+// D 0-49, C 50-74, B 75-89, A 90-100.
 const meterSegments = [
-  { path: "M 25 105 A 85 85 0 0 1 49.9 44.9", color: "#dc2626" },
-  { path: "M 49.9 44.9 A 85 85 0 0 1 110 20", color: "#d97706" },
-  { path: "M 110 20 A 85 85 0 0 1 170.1 44.9", color: "#315f9f" },
-  { path: "M 170.1 44.9 A 85 85 0 0 1 195 105", color: "#168267" },
+  { start: 0, end: 50, color: "#dc2626" },
+  { start: 50, end: 75, color: "#d97706" },
+  { start: 75, end: 90, color: "#315f9f" },
+  { start: 90, end: 100, color: "#168267" },
 ];
+
+function pointForScore(score: number) {
+  const angle = Math.PI - (Math.PI * score) / 100;
+
+  return {
+    x: METER_CENTER_X + METER_RADIUS * Math.cos(angle),
+    y: METER_CENTER_Y - METER_RADIUS * Math.sin(angle),
+  };
+}
+
+function segmentPath(startScore: number, endScore: number) {
+  const start = pointForScore(startScore);
+  const end = pointForScore(endScore);
+
+  return `M ${start.x} ${start.y} A ${METER_RADIUS} ${METER_RADIUS} 0 0 1 ${end.x} ${end.y}`;
+}
 
 export function PqcScoreMeter({ score, className, compact = false, showValue = true }: PqcScoreMeterProps) {
   const normalizedScore = Math.min(100, Math.max(0, Number.isFinite(score) ? score : 0));
@@ -34,8 +56,8 @@ export function PqcScoreMeter({ score, className, compact = false, showValue = t
         />
         {meterSegments.map((segment) => (
           <path
-            key={segment.path}
-            d={segment.path}
+            key={`${segment.start}-${segment.end}`}
+            d={segmentPath(segment.start, segment.end)}
             fill="none"
             stroke={segment.color}
             strokeWidth="16"
