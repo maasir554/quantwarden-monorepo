@@ -879,7 +879,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       </header>
 
       <section className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-3">
-        <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="flex h-full flex-col rounded-xl border border-white/60 bg-white/55 p-5 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
           <div className="mb-4 flex items-center gap-2 border-b border-slate-200 pb-3">
             <Lock className="h-4 w-4 text-[#8B0000]" />
             <h2 className="text-sm font-semibold text-slate-900">TLS Version Posture</h2>
@@ -887,7 +887,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
           <TlsVersionPostureChart data={data.tlsChartData || []} />
         </article>
 
-        <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="flex h-full flex-col rounded-xl border border-white/60 bg-white/55 p-5 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
           <div className="mb-4 flex items-center justify-between gap-2 border-b border-slate-200 pb-3">
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4 text-[#8B0000]" />
@@ -923,7 +923,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
           </div>
         </article>
 
-        <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="flex h-full flex-col rounded-xl border border-white/60 bg-white/55 p-5 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
             <div className="mb-4 flex items-center justify-between gap-4 border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2">
                 <KeyRound className="h-4 w-4 text-[#8B0000]" />
@@ -981,7 +981,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-xl border border-white/60 bg-white/55 p-5 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
           <div className="mb-2 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-emerald-600" />
@@ -1010,7 +1010,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
           />
         </article>
 
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-xl border border-white/60 bg-white/55 p-5 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
           <div className="mb-2 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-blue-600" />
@@ -1041,7 +1041,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-xl border border-white/60 bg-white/55 p-5 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="flex items-start gap-2">
               <AlertTriangle className="h-5 w-5 text-red-600" />
@@ -1113,7 +1113,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
           </Link>
         </article>
 
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-xl border border-white/60 bg-white/55 p-5 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
           <div className="mb-2 flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-indigo-600" />
             <h2 className="text-base font-bold text-[#3d200a]">Certificate Key Size</h2>
@@ -1131,7 +1131,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       </section>
 
       <section>
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-xl border border-white/60 bg-white/55 p-5 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
           <div className="mb-2 flex items-center gap-2">
             <Fingerprint className="h-5 w-5 text-[#8B0000]" />
             <h2 className="text-base font-bold text-[#3d200a]">Certificate Signature Algorithms</h2>
@@ -1148,7 +1148,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       </section>
 
       <section>
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-xl border border-white/60 bg-white/55 p-5 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
           <div className="mb-2 flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-violet-600" />
             <h2 className="text-base font-bold text-[#3d200a]">TLSv1.3 Key Exchange</h2>
@@ -1234,7 +1234,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-xl border border-white/60 bg-white/55 p-5 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
           <div className="mb-2 flex items-center gap-2">
             <Fingerprint className="h-5 w-5 text-[#8B0000]" />
             <h2 className="text-base font-bold text-[#3d200a]">Certificate Instances by Port</h2>
@@ -1251,7 +1251,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
           />
         </article>
 
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-xl border border-white/60 bg-white/55 p-5 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
           <div className="mb-2 flex items-center gap-2">
             <Fingerprint className="h-5 w-5 text-[#8B0000]" />
             <h2 className="text-base font-bold text-[#3d200a]">Certificates by Algorithm</h2>
@@ -1268,7 +1268,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
           />
         </article>
 
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-xl border border-white/60 bg-white/55 p-5 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
           <div className="mb-2 flex items-center gap-2">
             <Calendar className="h-5 w-5 text-amber-600" />
             <h2 className="text-base font-bold text-[#3d200a]">Expiring Certificates</h2>
@@ -1296,7 +1296,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       </section>
 
       <section>
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-xl border border-white/60 bg-white/55 p-5 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
           <div className="mb-2 flex items-center gap-2">
             <Fingerprint className="h-5 w-5 text-[#8B0000]" />
             <h2 className="text-base font-semibold text-slate-900">Top Certificates by Identity</h2>

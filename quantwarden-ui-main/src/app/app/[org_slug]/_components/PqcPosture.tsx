@@ -87,7 +87,7 @@ export default function PqcPosture({ org }: PqcPostureProps) {
           </div>
           <button
             onClick={() => setShowInfoModal(true)}
-            className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-[#8B0000]/40 hover:text-[#8B0000]"
+            className="flex items-center gap-2 rounded-lg border border-white/60 bg-white/55 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur-xl transition hover:border-[#8B0000]/30 hover:bg-white/70 hover:text-[#8B0000]"
           >
             <Info className="h-3.5 w-3.5" />
             Scoring Methodology
@@ -112,11 +112,21 @@ export default function PqcPosture({ org }: PqcPostureProps) {
   const tierCounts = organization.tierCounts || {};
   const tierTotal = (tierCounts.D || 0) + (tierCounts.C || 0) + (tierCounts.B || 0) + (tierCounts.A || 0);
   const tierDistribution = [
-    { tier: "D", label: "High risk", count: tierCounts.D || 0, color: "bg-red-500", text: "text-red-700" },
-    { tier: "C", label: "Legacy", count: tierCounts.C || 0, color: "bg-amber-500", text: "text-amber-700" },
-    { tier: "B", label: "Transitional", count: tierCounts.B || 0, color: "bg-blue-500", text: "text-blue-700" },
-    { tier: "A", label: "Quantum-safe", count: tierCounts.A || 0, color: "bg-emerald-500", text: "text-emerald-700" },
+    { tier: "D", label: "High risk", count: tierCounts.D || 0, color: "bg-[#a61b1b]", text: "text-red-800" },
+    { tier: "C", label: "Legacy", count: tierCounts.C || 0, color: "bg-[#d97706]", text: "text-amber-800" },
+    { tier: "B", label: "Transitional", count: tierCounts.B || 0, color: "bg-[#315f9f]", text: "text-blue-800" },
+    { tier: "A", label: "Quantum-safe", count: tierCounts.A || 0, color: "bg-[#168267]", text: "text-emerald-800" },
   ];
+  const riskMatrix = tierTotal > 0
+    ? Array.from({ length: 16 }, (_, index) => {
+        const position = ((index + 0.5) / 16) * tierTotal;
+        let cumulative = 0;
+        return tierDistribution.find((item) => {
+          cumulative += item.count;
+          return position <= cumulative;
+        }) || tierDistribution[tierDistribution.length - 1];
+      })
+    : [];
 
   const organizationLabel =
     organization.tier === "A"
@@ -139,61 +149,69 @@ export default function PqcPosture({ org }: PqcPostureProps) {
         </div>
         <button
           onClick={() => setShowInfoModal(true)}
-          className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-[#8B0000]/40 hover:text-[#8B0000]"
+          className="flex items-center gap-2 rounded-lg border border-white/60 bg-white/55 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur-xl transition hover:border-[#8B0000]/30 hover:bg-white/70 hover:text-[#8B0000]"
         >
           <Info className="h-3.5 w-3.5" />
           Scoring Methodology
         </button>
       </div>
 
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="text-base font-semibold text-slate-900">Organization readiness</h2>
-            <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-bold ${getTierColor(organization.tier)}`}>
-              Tier {organization.tier} · {organizationLabel}
-            </span>
+      <section className="overflow-hidden rounded-xl border border-white/60 bg-white/55 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
+        <div className="grid gap-5 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-base font-semibold text-slate-900">Organization readiness</h2>
+              <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-bold ${getTierColor(organization.tier)}`}>
+                Tier {organization.tier} · {organizationLabel}
+              </span>
+            </div>
+            <div className="flex items-center gap-6 text-sm text-slate-600">
+              <span><strong className={`text-xl ${scoreColor(organization.averageScore)}`}>{organization.averageScore}</strong> / 100</span>
+              <span><strong className="text-slate-900">{organization.totalPortsScored}</strong> ports assessed</span>
+            </div>
           </div>
-          <div className="flex items-center gap-5 text-sm text-slate-600">
-            <span><strong className={`text-lg ${scoreColor(organization.averageScore)}`}>{organization.averageScore}</strong> / 100</span>
-            <span><strong className="text-slate-900">{organization.totalPortsScored}</strong> ports assessed</span>
-          </div>
-        </div>
 
-        {tierTotal > 0 ? (
-          <div className="border-t border-slate-200 px-5 py-4">
-            <div className="flex h-2 overflow-hidden rounded-full bg-slate-100">
-              {tierDistribution.filter((item) => item.count > 0).map((item) => (
-                <button
-                  key={item.tier}
-                  type="button"
-                  title={`${item.label}: ${item.count}`}
-                  aria-label={`Filter ${item.label} assets`}
-                  onClick={() => setTierFilter(tierFilter === item.tier ? "ALL" : item.tier)}
-                  className={`${item.color} transition-opacity hover:opacity-80`}
-                  style={{ width: `${(item.count / tierTotal) * 100}%` }}
-                />
-              ))}
+          {tierTotal > 0 ? (
+            <div className="flex flex-col gap-3 border-t border-[#8a5d33]/10 pt-4 lg:min-w-[330px] lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">Risk overview</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Select a tile to filter the asset rollup.</p>
+              </div>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+                <div className="grid w-fit grid-cols-4 gap-1.5" role="group" aria-label="PQC risk distribution">
+                  {riskMatrix.map((item, index) => (
+                    <button
+                      key={`${item.tier}-${index}`}
+                      type="button"
+                      title={`${item.label}: ${item.count} asset${item.count === 1 ? "" : "s"}`}
+                      aria-label={`Filter ${item.label} assets`}
+                      aria-pressed={tierFilter === item.tier}
+                      onClick={() => setTierFilter(tierFilter === item.tier ? "ALL" : item.tier)}
+                      className={`aspect-square w-8 rounded-[4px] border border-white/60 shadow-sm transition hover:-translate-y-0.5 hover:brightness-105 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/30 ${item.color} ${tierFilter === item.tier ? "ring-2 ring-[#3d200a]/55 ring-offset-2 ring-offset-transparent" : ""}`}
+                    />
+                  ))}
+                </div>
+                <div className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
+                  {tierDistribution.map((item) => (
+                    <button
+                      key={item.tier}
+                      type="button"
+                      onClick={() => setTierFilter(tierFilter === item.tier ? "ALL" : item.tier)}
+                      className={`flex items-center gap-2 text-left text-[11px] font-medium transition hover:text-slate-900 ${tierFilter === item.tier ? item.text : "text-slate-600"}`}
+                    >
+                      <span className={`h-2 w-2 shrink-0 rounded-[2px] ${item.color}`} />
+                      {item.label} {item.count} ({Math.round((item.count / tierTotal) * 100)}%)
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
-              {tierDistribution.map((item) => (
-                <button
-                  key={item.tier}
-                  type="button"
-                  onClick={() => setTierFilter(tierFilter === item.tier ? "ALL" : item.tier)}
-                  className={`flex items-center gap-2 text-xs font-medium transition hover:text-slate-900 ${tierFilter === item.tier ? item.text : "text-slate-600"}`}
-                >
-                  <span className={`h-2 w-2 rounded-full ${item.color}`} />
-                  {item.label} {item.count} ({Math.round((item.count / tierTotal) * 100)}%)
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </section>
 
-      <div className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col items-center justify-between gap-4 border-b border-slate-200 p-4 sm:flex-row sm:p-5">
+      <div className="flex flex-col overflow-hidden rounded-xl border border-white/60 bg-white/55 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
+        <div className="flex flex-col items-center justify-between gap-4 border-b border-[#8a5d33]/10 p-4 sm:flex-row sm:p-5">
           <h2 className="flex items-center gap-2 font-semibold text-slate-900">
             <Server className="h-4 w-4 text-[#8B0000]" />
             Asset PQC Rollup
@@ -206,13 +224,13 @@ export default function PqcPosture({ org }: PqcPostureProps) {
                 placeholder="Search assets..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-4 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-[#8B0000] focus:outline-none focus:ring-2 focus:ring-[#8B0000]/10"
+                className="w-full rounded-lg border border-white/70 bg-white/65 py-2 pl-9 pr-4 text-xs font-medium text-slate-900 shadow-sm backdrop-blur placeholder:text-slate-400 focus:border-[#8B0000] focus:outline-none focus:ring-2 focus:ring-[#8B0000]/10"
               />
             </div>
             <select
               value={tierFilter}
               onChange={(e) => setTierFilter(e.target.value)}
-              className="w-full cursor-pointer appearance-none rounded-lg border border-slate-300 bg-white py-2 pl-4 pr-10 text-xs font-semibold text-slate-800 outline-none focus:border-[#8B0000] focus:ring-2 focus:ring-[#8B0000]/10 sm:w-auto"
+              className="w-full cursor-pointer appearance-none rounded-lg border border-white/70 bg-white/65 py-2 pl-4 pr-10 text-xs font-semibold text-slate-800 shadow-sm backdrop-blur outline-none focus:border-[#8B0000] focus:ring-2 focus:ring-[#8B0000]/10 sm:w-auto"
               style={{ backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a5d33' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1em 1em' }}
             >
               <option value="ALL">All Tiers</option>
@@ -223,7 +241,7 @@ export default function PqcPosture({ org }: PqcPostureProps) {
               <option value="F">Tier F</option>
             </select>
             {tierFilter !== 'ALL' && (
-              <Link href={`/app/${org.slug}/explore?pqcTier=${tierFilter}`} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-[#8B0000] transition hover:bg-slate-50">
+              <Link href={`/app/${org.slug}/explore?pqcTier=${tierFilter}`} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/70 bg-white/65 text-[#8B0000] shadow-sm backdrop-blur transition hover:bg-white/85">
                 <Telescope className="h-4 w-4" />
               </Link>
             )}
@@ -238,7 +256,7 @@ export default function PqcPosture({ org }: PqcPostureProps) {
           <div className="overflow-x-auto max-h-[600px] overflow-y-auto relative rounded-b-2xl">
             <table className="w-full text-left border-collapse">
               <thead className="sticky top-0 z-20">
-                <tr className="border-b border-slate-200 bg-slate-50">
+                <tr className="border-b border-[#8a5d33]/10 bg-white/45 backdrop-blur-xl">
                   <th className="py-3.5 px-5 text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/70">Asset</th>
                   <th className="py-3.5 px-5 text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/70 text-center">Score</th>
                   <th onClick={() => setTierSortOrder(prev => prev === "asc" ? "desc" : prev === "desc" ? null : "asc")} className="py-3.5 px-5 text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/70 cursor-pointer hover:bg-amber-50/50 transition-colors group select-none">
@@ -270,7 +288,7 @@ export default function PqcPosture({ org }: PqcPostureProps) {
                   const assetUrl = `/app/${org.slug}/asset/${asset.id}`;
                   
                   return (
-                    <tr key={asset.id} className="group cursor-pointer transition-colors hover:bg-slate-50" onClick={() => window.location.href = assetUrl}>
+                    <tr key={asset.id} className="group cursor-pointer transition-colors hover:bg-white/45" onClick={() => window.location.href = assetUrl}>
                       <td className="py-3.5 px-5">
                         <div className="font-bold text-[#3d200a] group-hover:text-[#8B0000] group-hover:underline transition-colors">{asset.value}</div>
                         <div className="text-[10px] text-[#8a5d33]/60 mt-0.5">{asset.ports.length} port{asset.ports.length > 1 ? 's' : ''} assessed</div>

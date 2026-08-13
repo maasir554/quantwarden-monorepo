@@ -534,8 +534,8 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
         <p className="mt-1 text-sm text-[#8a5d33]">Infrastructure relationships derived from discovery and port scans.</p>
       </header>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/60 bg-white/55 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
+        <div className="flex flex-col gap-3 border-b border-[#8a5d33]/10 px-5 py-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-base font-semibold text-slate-950">Network topology</h2>
             <p className="text-xs text-slate-500">
@@ -562,11 +562,11 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                 </span>
               ))}
             </div>
-            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+            <div className="flex items-center gap-1 rounded-lg border border-white/65 bg-white/45 p-1 shadow-sm backdrop-blur">
               <button
                 type="button"
                 onClick={() => updateZoom(-0.12)}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-white hover:text-slate-950"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-white/75 hover:text-slate-950"
                 aria-label="Zoom out"
               >
                 <Minus className="h-4 w-4" />
@@ -577,7 +577,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
               <button
                 type="button"
                 onClick={() => updateZoom(0.12)}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-white hover:text-slate-950"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-white/75 hover:text-slate-950"
                 aria-label="Zoom in"
               >
                 <Plus className="h-4 w-4" />
@@ -585,7 +585,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
               <button
                 type="button"
                 onClick={() => setViewport(getFitViewport(viewportSize.width, viewportSize.height))}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-white hover:text-slate-950"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-white/75 hover:text-slate-950"
                 aria-label="Reset zoom"
               >
                 <RotateCcw className="h-4 w-4" />
@@ -596,7 +596,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
 
         <div
           ref={viewportRef}
-          className="relative min-h-0 flex-1 overflow-hidden bg-slate-50"
+          className="relative min-h-0 flex-1 overflow-hidden bg-white/25"
           onMouseDown={(event) => {
             if (event.button !== 0) return;
             dragStateRef.current = {
@@ -655,7 +655,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                 </div>
               ) : null}
               <svg
-                className="block h-full w-full bg-slate-50"
+                className="block h-full w-full bg-transparent"
                 onClick={() => {
                   if (suppressCanvasClickRef.current) {
                     suppressCanvasClickRef.current = false;
@@ -664,7 +664,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                   setSelectedNodeId(null);
                 }}
               >
-                <rect width="100%" height="100%" fill="#f8fafc" />
+                <rect width="100%" height="100%" fill="rgba(255,255,255,0.28)" />
                 <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}>
                   {visibleEdges.map((edge) => {
                     const source = nodeById.get(edge.source);
