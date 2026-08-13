@@ -12,6 +12,7 @@ import {
   Repeat,
   Save,
   Trash2,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DEFAULT_REPORT_SECTIONS, REPORT_SECTION_META, type ReportSectionKey } from "@/lib/reporting";
@@ -72,9 +73,9 @@ const frequencyOptions: Array<{ value: Frequency; label: string }> = [
   { value: "monthly", label: "Monthly" },
 ];
 
-const inputClass = "h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-[#8B0000] focus:ring-2 focus:ring-[#8B0000]/10 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500";
+const inputClass = "h-10 w-full rounded-lg border border-[#8a5d33]/35 bg-white/65 px-3 text-sm text-slate-900 shadow-sm backdrop-blur outline-none transition focus:border-[#8B0000]/55 focus:ring-2 focus:ring-[#8B0000]/10 disabled:cursor-not-allowed disabled:bg-white/30 disabled:text-slate-500";
 const buttonPrimary = "inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#8B0000] px-4 text-sm font-semibold text-white transition hover:bg-[#730000] disabled:cursor-not-allowed disabled:opacity-50";
-const buttonSecondary = "inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const buttonSecondary = "inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#8a5d33]/35 bg-white/60 px-4 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur transition hover:border-[#8B0000]/35 hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-50";
 
 function frequencyToApi(value: Frequency) {
   if (value === "every-3-days") return { frequency: "daily", interval: 3 } as const;
@@ -150,7 +151,7 @@ function Switch({ checked, onChange, disabled, label }: { checked: boolean; onCh
 
 function EngineChoice({ title, helper, checked, onChange, disabled }: { title: string; helper: string; checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
   return (
-    <div className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 bg-white p-4">
+    <div className="flex items-start justify-between gap-4 rounded-lg border border-[#8a5d33]/25 bg-white/45 p-4 backdrop-blur">
       <div>
         <p className="text-sm font-semibold text-slate-900">{title}</p>
         <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p>
@@ -162,8 +163,8 @@ function EngineChoice({ title, helper, checked, onChange, disabled }: { title: s
 
 function Panel({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 px-5 py-4">
+    <section className="overflow-hidden rounded-xl border border-[#8a5d33]/30 bg-white/55 shadow-sm ring-1 ring-white/35 backdrop-blur-xl">
+      <div className="border-b border-[#8a5d33]/20 px-5 py-4">
         <h2 className="text-base font-semibold text-slate-900">{title}</h2>
         {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
       </div>
@@ -199,7 +200,7 @@ function EmailRecipients({ values, onChange, disabled }: { values: string[]; onC
     setDraft("");
   };
   return (
-    <div className="rounded-lg border border-slate-300 bg-white p-2">
+    <div className="rounded-lg border border-[#8a5d33]/35 bg-white/65 p-2 shadow-sm backdrop-blur">
       <div className="flex flex-wrap gap-1.5">
         {values.map((value) => (
           <span key={value} className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700">
@@ -263,6 +264,7 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
   }), [org.name, timezone]);
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState<EmailDraft>(() => emptyEmailDraft());
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
 
   const recurringSchedules = useMemo(() => scanSchedules.filter((item) => item.mode === "recurring"), [scanSchedules]);
   const oneTimeSchedules = useMemo(() => scanSchedules.filter((item) => item.mode === "one_time"), [scanSchedules]);
@@ -311,6 +313,15 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
   }, [emptyEmailDraft, org.id]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  useEffect(() => {
+    if (!emailModalOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) setEmailModalOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [emailModalOpen, saving]);
 
   const request = async (url: string, method: string, body?: unknown) => {
     const response = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
@@ -396,12 +407,13 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
       setSelectedEmailId(result.schedule.id);
       setNotice({ tone: "success", text: emailDraft.enabled ? "Automatic email delivery saved and enabled." : "Email setup saved. Delivery remains disabled." });
       await refresh();
+      setEmailModalOpen(false);
     } catch (error: any) { setNotice({ tone: "error", text: error?.message || "Could not save email delivery." }); }
     finally { setSaving(false); }
   };
 
-  const selectEmail = (schedule: EmailSchedule) => { setSelectedEmailId(schedule.id); setEmailDraft({ ...schedule }); };
-  const createEmail = () => { setSelectedEmailId(null); setEmailDraft(emptyEmailDraft()); setNotice(null); };
+  const selectEmail = (schedule: EmailSchedule) => { setSelectedEmailId(schedule.id); setEmailDraft({ ...schedule }); setEmailModalOpen(true); };
+  const createEmail = () => { setSelectedEmailId(null); setEmailDraft(emptyEmailDraft()); setNotice(null); setEmailModalOpen(true); };
   const deleteEmail = async () => {
     if (!selectedEmailId) return;
     setSaving(true);
@@ -410,13 +422,14 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
       setNotice({ tone: "success", text: "Email delivery schedule deleted." });
       setSelectedEmailId(null);
       await refresh();
+      setEmailModalOpen(false);
     } catch (error: any) { setNotice({ tone: "error", text: error?.message || "Could not delete email delivery." }); }
     finally { setSaving(false); }
   };
 
   return (
     <div className="flex flex-col space-y-4 pb-10">
-      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4">
+      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[#8a5d33]/25 pb-4">
         <div className="flex items-start gap-3">
           <FileCheck className="mt-1 h-5 w-5 text-[#8B0000]" />
           <div>
@@ -432,8 +445,8 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
 
       {notice ? <div role="status" className={cn("rounded-lg border px-4 py-3 text-sm", notice.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800")}>{notice.text}</div> : null}
 
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white/25 shadow-sm">
-        <nav className="overflow-x-auto border-b border-slate-200 px-3 pt-2" aria-label="Reporting sections">
+      <section className="overflow-hidden rounded-xl border border-[#8a5d33]/35 bg-white/25 shadow-sm ring-1 ring-white/30 backdrop-blur-xl">
+        <nav className="overflow-x-auto border-b border-[#8a5d33]/25 bg-white/15 px-3 pt-2" aria-label="Reporting sections">
           <div className="flex min-w-max gap-1" role="tablist">
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -453,7 +466,7 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
         {!loading && activeTab === "periodicScans" ? (
           <div className="space-y-4 p-4 sm:p-5">
             <Panel title="Periodic scans" description="Run repeatable discovery and TLS checks at an exact local time.">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+              <div className="flex items-center justify-between border-b border-[#8a5d33]/20 pb-4">
                 <div><p className="text-sm font-semibold text-slate-900">Automation</p><p className="mt-1 text-xs text-slate-500">Disabled until you explicitly enable and save it.</p></div>
                 <Switch checked={periodicEnabled} onChange={setPeriodicEnabled} disabled={!canConfigure} label="Periodic scan automation" />
               </div>
@@ -466,7 +479,7 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
                 <EngineChoice title="OpenSSL analysis" helper="Refresh certificates, TLS, and PQC findings." checked={periodicOpenSsl} onChange={setPeriodicOpenSsl} disabled={!canConfigure} />
               </div>
               {periodicPortScan ? <div className="mt-5 grid gap-4 sm:grid-cols-[220px_1fr]"><Field label="Port scope"><select value={periodicPortMode} onChange={(e) => setPeriodicPortMode(e.target.value)} className={inputClass}><option value="all">All configured ports</option><option value="only-selected">Only selected ports</option><option value="exclude-selected">Exclude selected ports</option></select></Field>{periodicPortMode !== "all" ? <Field label="Ports" helper="Comma-separated, 1–65535."><input value={periodicPorts} onChange={(e) => setPeriodicPorts(e.target.value)} className={inputClass} /></Field> : null}</div> : null}
-              <div className="mt-5 flex items-center justify-between gap-4 border-t border-slate-200 pt-4">
+              <div className="mt-5 flex items-center justify-between gap-4 border-t border-[#8a5d33]/20 pt-4">
                 <p className="text-xs text-slate-500">Next run: <strong className="text-slate-800">{formatDateTime(nextScan?.nextRunAt)}</strong></p>
                 <button type="button" disabled={!canConfigure || saving} onClick={savePeriodic} className={buttonPrimary}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Save schedule</button>
               </div>
@@ -486,36 +499,83 @@ export default function OrgReporting({ org, canConfigure }: OrgReportingProps) {
                 <EngineChoice title="OpenSSL analysis" helper="Refresh certificates, TLS, and PQC findings." checked={oneTimeOpenSsl} onChange={setOneTimeOpenSsl} disabled={!canConfigure} />
               </div>
               {oneTimePortScan ? <div className="mt-5 grid gap-4 sm:grid-cols-[220px_1fr]"><Field label="Port scope"><select value={oneTimePortMode} onChange={(e) => setOneTimePortMode(e.target.value)} className={inputClass}><option value="all">All configured ports</option><option value="only-selected">Only selected ports</option><option value="exclude-selected">Exclude selected ports</option></select></Field>{oneTimePortMode !== "all" ? <Field label="Ports"><input value={oneTimePorts} onChange={(e) => setOneTimePorts(e.target.value)} className={inputClass} /></Field> : null}</div> : null}
-              <div className="mt-5 flex justify-end border-t border-slate-200 pt-4"><button type="button" disabled={!canConfigure || saving} onClick={scheduleOneTime} className={buttonPrimary}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}Schedule scan</button></div>
+              <div className="mt-5 flex justify-end border-t border-[#8a5d33]/20 pt-4"><button type="button" disabled={!canConfigure || saving} onClick={scheduleOneTime} className={buttonPrimary}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}Schedule scan</button></div>
             </Panel>
-            {oneTimeSchedules.length > 0 ? <Panel title="Upcoming one-time scans"><div className="divide-y divide-slate-200">{oneTimeSchedules.map((schedule) => <div key={schedule.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"><div><p className="text-sm font-medium text-slate-900">{schedule.engine === "portDiscovery" ? "Port discovery" : "OpenSSL analysis"}</p><p className="mt-1 text-xs text-slate-500">{formatDateTime(schedule.nextRunAt || schedule.runAt)}</p></div><button type="button" onClick={() => deleteScanSchedule(schedule.id)} disabled={!canConfigure || saving} aria-label="Delete scheduled scan" className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-700"><Trash2 className="h-4 w-4" /></button></div>)}</div></Panel> : null}
+            {oneTimeSchedules.length > 0 ? <Panel title="Upcoming one-time scans"><div className="divide-y divide-[#8a5d33]/15">{oneTimeSchedules.map((schedule) => <div key={schedule.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"><div><p className="text-sm font-medium text-slate-900">{schedule.engine === "portDiscovery" ? "Port discovery" : "OpenSSL analysis"}</p><p className="mt-1 text-xs text-slate-500">{formatDateTime(schedule.nextRunAt || schedule.runAt)}</p></div><button type="button" onClick={() => deleteScanSchedule(schedule.id)} disabled={!canConfigure || saving} aria-label="Delete scheduled scan" className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-700"><Trash2 className="h-4 w-4" /></button></div>)}</div></Panel> : null}
           </div>
         ) : null}
 
         {!loading && activeTab === "autoEmails" ? (
-          <div className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[260px_minmax(0,1fr)]">
-            <Panel title="Email schedules">
-              <button type="button" onClick={createEmail} disabled={!canConfigure} className={cn(buttonSecondary, "w-full")}><Plus className="h-4 w-4" />New schedule</button>
-              <div className="mt-3 divide-y divide-slate-200">
-                {emailSchedules.length === 0 ? <p className="py-4 text-sm text-slate-500">No automatic emails configured.</p> : emailSchedules.map((schedule) => <button key={schedule.id} type="button" onClick={() => selectEmail(schedule)} className={cn("w-full py-3 text-left", selectedEmailId === schedule.id ? "text-[#8B0000]" : "text-slate-800")}><span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold">{schedule.title}</span><span className={cn("h-2 w-2 rounded-full", schedule.enabled ? "bg-emerald-500" : "bg-slate-300")} /></span><span className="mt-1 block text-xs text-slate-500">{schedule.enabled ? formatDateTime(schedule.nextRunAt) : "Disabled"}</span></button>) }
+          <div className="p-4 sm:p-5">
+            <Panel title="Email schedules" description="Send generated security reports automatically. Delivery remains off until explicitly enabled.">
+              <div className="flex justify-end">
+                <button type="button" onClick={createEmail} disabled={!canConfigure} className={buttonPrimary}><Plus className="h-4 w-4" />New schedule</button>
               </div>
-            </Panel>
-            <Panel title={selectedEmailId ? "Edit automatic email" : "Create automatic email"} description="Delivery is opt-in and uses the same generated PDF as Share PDF.">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-4"><div><p className="text-sm font-semibold text-slate-900">Automatic delivery</p><p className="mt-1 text-xs text-slate-500">Disabled by default.</p></div><Switch checked={emailDraft.enabled} onChange={(enabled) => setEmailDraft((current) => ({ ...current, enabled }))} disabled={!canConfigure} label="Automatic email delivery" /></div>
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <Field label="Schedule name"><input value={emailDraft.title} onChange={(e) => setEmailDraft((current) => ({ ...current, title: e.target.value }))} disabled={!canConfigure} className={inputClass} /></Field>
-                <Field label="Report heading"><input value={emailDraft.heading} onChange={(e) => setEmailDraft((current) => ({ ...current, heading: e.target.value }))} disabled={!canConfigure} className={inputClass} /></Field>
-                <Field label="Frequency" helper="Daily is the minimum allowed frequency."><select value={emailDraft.frequency} onChange={(e) => setEmailDraft((current) => ({ ...current, frequency: e.target.value as EmailDraft["frequency"] }))} disabled={!canConfigure} className={inputClass}><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></Field>
-                <Field label="Delivery time" helper={`Exact time in ${timezone}.`}><input type="time" value={localTimeValue(emailDraft.runAt)} onChange={(e) => setEmailDraft((current) => ({ ...current, runAt: recurringAnchor(e.target.value) }))} disabled={!canConfigure} className={inputClass} /></Field>
-              </div>
-              <div className="mt-5"><Field label="Recipients" helper="At least one valid recipient is required before enabling."><EmailRecipients values={emailDraft.recipients} onChange={(recipients) => setEmailDraft((current) => ({ ...current, recipients }))} disabled={!canConfigure} /></Field></div>
-              <div className="mt-5"><p className="text-sm font-semibold text-slate-800">PDF contents</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{REPORT_SECTION_META.map((section) => { const checked = emailDraft.sections[section.key]; return <button key={section.key} type="button" disabled={!canConfigure} onClick={() => setEmailDraft((current) => ({ ...current, sections: { ...current.sections, [section.key]: !checked } }))} className={cn("flex items-start gap-3 rounded-lg border p-3 text-left", checked ? "border-[#8B0000]/30 bg-[#8B0000]/5" : "border-slate-200 bg-white")}><span className={cn("mt-0.5 flex h-4 w-4 items-center justify-center rounded border", checked ? "border-[#8B0000] bg-[#8B0000] text-white" : "border-slate-300")}>{checked ? <Check className="h-3 w-3" /> : null}</span><span><span className="block text-sm font-medium text-slate-900">{section.label}</span><span className="mt-0.5 block text-xs text-slate-500">{section.helper}</span></span></button>; })}</div></div>
-              {emailDraft.lastError ? <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">Last delivery failed: {emailDraft.lastError}</div> : null}
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-xs text-slate-500">Next delivery: <strong className="text-slate-800">{emailDraft.enabled ? formatDateTime(emailDraft.nextRunAt) : "Disabled"}</strong></p><div className="flex gap-2">{selectedEmailId ? <button type="button" onClick={deleteEmail} disabled={!canConfigure || saving} className={buttonSecondary}><Trash2 className="h-4 w-4" />Delete</button> : null}<button type="button" onClick={saveEmail} disabled={!canConfigure || saving} className={buttonPrimary}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Save email</button></div></div>
+              {emailSchedules.length === 0 ? (
+                <div className="mt-4 rounded-lg border border-dashed border-[#8a5d33]/35 bg-white/25 px-5 py-10 text-center">
+                  <p className="text-sm font-medium text-slate-700">No automatic emails configured.</p>
+                  <p className="mt-1 text-xs text-slate-500">Create a schedule when you are ready to enable report delivery.</p>
+                </div>
+              ) : (
+                <div className="mt-4 overflow-hidden rounded-lg border border-[#8a5d33]/25 bg-white/30">
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-b border-[#8a5d33]/20 bg-white/30 px-4 py-2.5 text-xs font-semibold text-slate-500 sm:grid-cols-[minmax(0,1fr)_160px_140px]">
+                    <span>Schedule</span><span className="hidden sm:block">Next delivery</span><span>Status</span>
+                  </div>
+                  <div className="divide-y divide-[#8a5d33]/15">
+                    {emailSchedules.map((schedule) => (
+                      <button key={schedule.id} type="button" onClick={() => selectEmail(schedule)} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-3 text-left transition hover:bg-white/40 sm:grid-cols-[minmax(0,1fr)_160px_140px]">
+                        <span className="min-w-0"><span className="block truncate text-sm font-semibold text-slate-900">{schedule.title}</span><span className="mt-0.5 block truncate text-xs text-slate-500">{schedule.recipients.join(", ") || "No recipients"}</span></span>
+                        <span className="hidden text-xs text-slate-600 sm:block">{schedule.enabled ? formatDateTime(schedule.nextRunAt) : "—"}</span>
+                        <span className={cn("inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", schedule.enabled ? "bg-emerald-100/80 text-emerald-800" : "bg-slate-200/70 text-slate-600")}><span className={cn("h-1.5 w-1.5 rounded-full", schedule.enabled ? "bg-emerald-600" : "bg-slate-400")} />{schedule.enabled ? "Enabled" : "Disabled"}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </Panel>
           </div>
         ) : null}
       </section>
+
+      {emailModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#3d200a]/35 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setEmailModalOpen(false); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="email-schedule-title" className="flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[#8a5d33]/45 bg-[#fff8e8]/90 shadow-2xl ring-1 ring-white/60 backdrop-blur-2xl">
+            <header className="flex items-start justify-between gap-4 border-b border-[#8a5d33]/25 px-5 py-4">
+              <div>
+                <h2 id="email-schedule-title" className="text-lg font-semibold text-slate-900">{selectedEmailId ? "Edit email schedule" : "New email schedule"}</h2>
+                <p className="mt-1 text-xs text-slate-500">Uses the same generated PDF as Share PDF. Delivery is disabled by default.</p>
+              </div>
+              <button type="button" onClick={() => setEmailModalOpen(false)} disabled={saving} aria-label="Close email schedule" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/65 hover:text-slate-900"><X className="h-4 w-4" /></button>
+            </header>
+
+            <div className="overflow-y-auto px-5 py-4">
+              <div className="flex items-center justify-between border-b border-[#8a5d33]/20 pb-4"><div><p className="text-sm font-semibold text-slate-900">Automatic delivery</p><p className="mt-1 text-xs text-slate-500">Enable only after adding at least one recipient.</p></div><Switch checked={emailDraft.enabled} onChange={(enabled) => setEmailDraft((current) => ({ ...current, enabled }))} disabled={!canConfigure} label="Automatic email delivery" /></div>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Field label="Schedule name"><input value={emailDraft.title} onChange={(e) => setEmailDraft((current) => ({ ...current, title: e.target.value }))} disabled={!canConfigure} className={inputClass} /></Field>
+                <Field label="Report heading"><input value={emailDraft.heading} onChange={(e) => setEmailDraft((current) => ({ ...current, heading: e.target.value }))} disabled={!canConfigure} className={inputClass} /></Field>
+                <Field label="Frequency" helper="Daily is the minimum frequency."><select value={emailDraft.frequency} onChange={(e) => setEmailDraft((current) => ({ ...current, frequency: e.target.value as EmailDraft["frequency"] }))} disabled={!canConfigure} className={inputClass}><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></Field>
+                <Field label="Delivery time" helper={`Exact time in ${timezone}.`}><input type="time" value={localTimeValue(emailDraft.runAt)} onChange={(e) => setEmailDraft((current) => ({ ...current, runAt: recurringAnchor(e.target.value) }))} disabled={!canConfigure} className={inputClass} /></Field>
+              </div>
+              <div className="mt-4"><Field label="Recipients" helper="Press Enter after each address."><EmailRecipients values={emailDraft.recipients} onChange={(recipients) => setEmailDraft((current) => ({ ...current, recipients }))} disabled={!canConfigure} /></Field></div>
+              <div className="mt-4">
+                <p className="text-sm font-semibold text-slate-800">PDF contents</p>
+                <div className="mt-2 overflow-hidden rounded-lg border border-[#8a5d33]/25 bg-white/30 divide-y divide-[#8a5d33]/15">
+                  {REPORT_SECTION_META.map((section) => {
+                    const checked = emailDraft.sections[section.key];
+                    return <button key={section.key} type="button" disabled={!canConfigure} onClick={() => setEmailDraft((current) => ({ ...current, sections: { ...current.sections, [section.key]: !checked } }))} className={cn("flex w-full items-start gap-3 px-3.5 py-3 text-left transition", checked ? "bg-[#8B0000]/6" : "hover:bg-white/35")}><span className={cn("mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border", checked ? "border-[#8B0000] bg-[#8B0000] text-white" : "border-[#8a5d33]/45 bg-white/45")}>{checked ? <Check className="h-3 w-3" /> : null}</span><span><span className="block text-sm font-medium text-slate-900">{section.label}</span><span className="mt-0.5 block text-xs text-slate-500">{section.helper}</span></span></button>;
+                  })}
+                </div>
+              </div>
+              {emailDraft.lastError ? <div className="mt-4 rounded-lg border border-red-300/70 bg-red-50/75 p-3 text-xs text-red-800">Last delivery failed: {emailDraft.lastError}</div> : null}
+            </div>
+
+            <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[#8a5d33]/25 bg-white/30 px-5 py-3.5">
+              <p className="text-xs text-slate-500">Next delivery: <strong className="text-slate-800">{emailDraft.enabled ? formatDateTime(emailDraft.nextRunAt) : "Disabled"}</strong></p>
+              <div className="flex gap-2">{selectedEmailId ? <button type="button" onClick={deleteEmail} disabled={!canConfigure || saving} className={buttonSecondary}><Trash2 className="h-4 w-4" />Delete</button> : null}<button type="button" onClick={saveEmail} disabled={!canConfigure || saving} className={buttonPrimary}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Save schedule</button></div>
+            </footer>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
