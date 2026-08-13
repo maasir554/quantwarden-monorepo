@@ -96,6 +96,10 @@ function isDnsExpiredAsset(asset: { type: string; scanStatus?: string; portDisco
   return asset.type === "domain" && (asset.scanStatus === "expired" || asset.portDiscoveryStatus === "expired");
 }
 
+function isTimeoutAsset(asset: { scanStatus?: string; portDiscoveryStatus?: string }) {
+  return asset.scanStatus === "failed" || asset.portDiscoveryStatus === "failed";
+}
+
 function parseOpenPorts(raw: unknown): AssetPort[] {
   return normalizeAssetOpenPorts(raw);
 }
@@ -448,9 +452,10 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
   const [rootSearch, setRootSearch] = useState("");
   const [leafSearch, setLeafSearch] = useState("");
   const [bucketFilter, setBucketFilter] = useState("all");
-  const [dnsFilter, setDnsFilter] = useState<"all" | "expired" | "resolved" | "unresolved">("all");
+  const [dnsFilter, setDnsFilter] = useState<"all" | "expired" | "timeout" | "resolved" | "unresolved">("all");
   const [bucketKeyword, setBucketKeyword] = useState("");
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [showCleanupModal, setShowCleanupModal] = useState(false);
   const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(null);
   const [isDeletingAssets, setIsDeletingAssets] = useState(false);
@@ -1478,7 +1483,8 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
   // === Filtered lists ===
   const matchesAdvancedFilters = (asset: ManagedRootAsset | ManagedLeafAsset) => {
     const expired = isDnsExpiredAsset(asset);
-    const dnsMatches = dnsFilter === "all" || (dnsFilter === "expired" && expired) || (dnsFilter === "resolved" && Boolean(asset.resolvedIp)) || (dnsFilter === "unresolved" && asset.type === "domain" && !asset.resolvedIp);
+    const timeout = isTimeoutAsset(asset);
+    const dnsMatches = dnsFilter === "all" || (dnsFilter === "expired" && expired) || (dnsFilter === "timeout" && timeout) || (dnsFilter === "resolved" && Boolean(asset.resolvedIp)) || (dnsFilter === "unresolved" && asset.type === "domain" && !asset.resolvedIp);
     const bucketMatches = bucketFilter === "all" || asset.buckets.includes(bucketFilter);
     const keywordMatches = !bucketKeyword.trim() || asset.buckets.some((bucket) => bucket.toLowerCase().includes(bucketKeyword.trim().toLowerCase()));
     return dnsMatches && bucketMatches && keywordMatches;
@@ -1494,6 +1500,7 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
       a.buckets.some((bucket) => bucket.toLowerCase().includes(leafSearch.toLowerCase())))
   );
   const expiredAssetIds = allManagedAssets.filter(isDnsExpiredAsset).map((asset) => asset.id);
+  const timeoutAssetIds = allManagedAssets.filter((asset) => !isDnsExpiredAsset(asset) && isTimeoutAsset(asset)).map((asset) => asset.id);
   const activeFilterCount = Number(bucketFilter !== "all") + Number(dnsFilter !== "all") + Number(Boolean(bucketKeyword.trim()));
   const discoverableRootDomains = rootAssets.filter(
     (asset) => asset.type === "domain" && !asset.scanning && !activeSubdomainDiscoveryAssetIds.has(asset.id)
@@ -1588,11 +1595,12 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
   const renderRootAssetRow = (asset: typeof rootAssets[0]) => {
     const Icon = getAssetIcon(asset.type);
     const isDnsExpired = isDnsExpiredAsset(asset);
+    const isTimeout = !isDnsExpired && isTimeoutAsset(asset);
     const isPortDiscoveryRunning = activePortDiscoveryAssetIds.has(asset.id);
     return (
       <div
         key={asset.id}
-        className="group flex items-center justify-between border-b border-dotted border-[#8B0000]/20 px-4 py-3 transition-colors hover:bg-[#8B0000]/[0.035] last:border-b-0"
+        className={cn("group flex items-center justify-between border-b border-dotted border-[#8B0000]/20 px-4 py-3 transition-colors hover:bg-[#8B0000]/[0.035] last:border-b-0", isTimeout && "bg-red-500/[0.055]")}
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {canManageAssets ? (
@@ -1609,13 +1617,20 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
-              <p className={`truncate text-sm font-semibold ${isDnsExpired ? "text-red-600" : "text-[#3d200a]"}`}>{asset.value}</p>
+              <p className={`truncate text-sm font-semibold ${isDnsExpired || isTimeout ? "text-red-600" : "text-[#3d200a]"}`}>{asset.value}</p>
               <AssetBucketChips bucket={asset.bucket} buckets={asset.buckets} />
               <RenderResolvedIpChip value={asset.value} type={asset.type} resolvedIp={asset.resolvedIp} />
               {isDnsExpired && (
                 <ActionTooltip content="The domain was not found in DNS.">
-                  <span className="inline-flex shrink-0 cursor-help items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-600">
-                    <TriangleAlert className="h-3 w-3" />
+                  <span className="inline-flex shrink-0 cursor-help items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-600">
+                    <TriangleAlert className="h-3 w-3" />DNS expired
+                  </span>
+                </ActionTooltip>
+              )}
+              {isTimeout && (
+                <ActionTooltip content="The latest scan timed out before the target responded.">
+                  <span className="inline-flex shrink-0 cursor-help items-center gap-1 rounded-full bg-red-600/10 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                    <Clock className="h-3 w-3" />Timeout
                   </span>
                 </ActionTooltip>
               )}
@@ -1715,11 +1730,12 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
   const renderLeafAssetRow = (asset: typeof leafAssets[0]) => {
     const Icon = getAssetIcon(asset.type);
     const isDnsExpired = isDnsExpiredAsset(asset);
+    const isTimeout = !isDnsExpired && isTimeoutAsset(asset);
     const isPortDiscoveryRunning = activePortDiscoveryAssetIds.has(asset.id);
     return (
       <div
         key={asset.id}
-        className="group flex items-center justify-between border-b border-dotted border-[#8B0000]/20 px-4 py-3 transition-colors hover:bg-[#8B0000]/[0.035] last:border-b-0"
+        className={cn("group flex items-center justify-between border-b border-dotted border-[#8B0000]/20 px-4 py-3 transition-colors hover:bg-[#8B0000]/[0.035] last:border-b-0", isTimeout && "bg-red-500/[0.055]")}
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {canManageAssets ? (
@@ -1736,13 +1752,20 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
-              <p className={`truncate text-sm font-semibold ${isDnsExpired ? "text-red-600" : "text-[#3d200a]"}`}>{asset.value}</p>
+              <p className={`truncate text-sm font-semibold ${isDnsExpired || isTimeout ? "text-red-600" : "text-[#3d200a]"}`}>{asset.value}</p>
               <AssetBucketChips bucket={asset.bucket} buckets={asset.buckets} />
               <RenderResolvedIpChip value={asset.value} type={asset.type} resolvedIp={asset.resolvedIp} />
               {isDnsExpired && (
                 <ActionTooltip content="The domain was not found in DNS.">
-                  <span className="inline-flex shrink-0 cursor-help items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-600">
-                    <TriangleAlert className="h-3 w-3" />
+                  <span className="inline-flex shrink-0 cursor-help items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-600">
+                    <TriangleAlert className="h-3 w-3" />DNS expired
+                  </span>
+                </ActionTooltip>
+              )}
+              {isTimeout && (
+                <ActionTooltip content="The latest scan timed out before the target responded.">
+                  <span className="inline-flex shrink-0 cursor-help items-center gap-1 rounded-full bg-red-600/10 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                    <Clock className="h-3 w-3" />Timeout
                   </span>
                 </ActionTooltip>
               )}
@@ -1899,9 +1922,9 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
                   <Check className="h-3.5 w-3.5 text-[#8B0000]" />Select visible
                 </button>
               ) : null}
-              {canManageAssets && expiredAssetIds.length > 0 ? (
-                <button type="button" onClick={() => setPendingDeleteIds(expiredAssetIds)} className="inline-flex h-10 items-center gap-2 rounded-full border border-red-300/70 bg-red-50/75 px-4 text-xs font-bold text-red-700 transition hover:bg-red-100">
-                  <Trash2 className="h-3.5 w-3.5" />Delete DNS expired ({expiredAssetIds.length})
+              {canManageAssets && (expiredAssetIds.length > 0 || timeoutAssetIds.length > 0) ? (
+                <button type="button" onClick={() => setShowCleanupModal(true)} className="inline-flex h-10 items-center gap-2 rounded-full border border-red-300/70 bg-red-50/75 px-4 text-xs font-bold text-red-700 transition hover:bg-red-100">
+                  <Trash2 className="h-3.5 w-3.5" />Delete…
                 </button>
               ) : null}
               {canManageAssets && selectedAssetIds.size > 0 ? (
@@ -2111,11 +2134,31 @@ export default function AssetManagement({ org, currentUserRole, currentUserId, c
             <button type="button" onClick={() => setShowFilterModal(false)} aria-label="Close asset filters" className="rounded-lg p-2 text-[#8a5d33] transition hover:bg-white/60"><X className="h-4 w-4" /></button>
           </header>
           <div className="space-y-4 px-5 py-4">
-            <label className="grid gap-1.5"><span className="text-sm font-semibold text-[#3d200a]">DNS state</span><select value={dnsFilter} onChange={(event) => setDnsFilter(event.target.value as typeof dnsFilter)} className="h-10 rounded-lg border border-[#8a5d33]/35 bg-white/70 px-3 text-sm text-[#3d200a] outline-none focus:border-[#8B0000]/50"><option value="all">Any state</option><option value="expired">DNS expired</option><option value="resolved">Resolved IP</option><option value="unresolved">No resolved IP</option></select></label>
+            <label className="grid gap-1.5"><span className="text-sm font-semibold text-[#3d200a]">Asset state</span><select value={dnsFilter} onChange={(event) => setDnsFilter(event.target.value as typeof dnsFilter)} className="h-10 rounded-lg border border-[#8a5d33]/35 bg-white/70 px-3 text-sm text-[#3d200a] outline-none focus:border-[#8B0000]/50"><option value="all">Any state</option><option value="expired">DNS expired</option><option value="timeout">Timeout</option><option value="resolved">Resolved IP</option><option value="unresolved">No resolved IP</option></select></label>
             <label className="grid gap-1.5"><span className="text-sm font-semibold text-[#3d200a]">Bucket</span><select value={bucketFilter} onChange={(event) => setBucketFilter(event.target.value)} className="h-10 rounded-lg border border-[#8a5d33]/35 bg-white/70 px-3 text-sm text-[#3d200a] outline-none focus:border-[#8B0000]/50"><option value="all">All buckets</option>{bucketOptions.map((bucket) => <option key={bucket} value={bucket}>{bucket}</option>)}</select></label>
             <label className="grid gap-1.5"><span className="text-sm font-semibold text-[#3d200a]">Bucket keyword</span><input value={bucketKeyword} onChange={(event) => setBucketKeyword(event.target.value)} placeholder="e.g. banking, payment, admin" className="h-10 rounded-lg border border-[#8a5d33]/35 bg-white/70 px-3 text-sm text-[#3d200a] outline-none placeholder:text-[#8a5d33]/50 focus:border-[#8B0000]/50" /></label>
           </div>
           <footer className="flex items-center justify-between border-t border-[#8a5d33]/25 bg-white/25 px-5 py-3.5"><button type="button" onClick={() => { setDnsFilter("all"); setBucketFilter("all"); setBucketKeyword(""); }} className="text-sm font-semibold text-[#8B0000] hover:underline">Clear filters</button><button type="button" onClick={() => setShowFilterModal(false)} className="inline-flex h-10 items-center rounded-lg bg-[#8B0000] px-4 text-sm font-semibold text-white hover:bg-[#730000]">Apply filters</button></footer>
+        </section>
+      </div>
+    ), document.body)}
+    {showCleanupModal && typeof document !== "undefined" && ReactDOM.createPortal((
+      <div className="fixed inset-0 z-[128] flex items-center justify-center bg-[#3d200a]/40 p-4 backdrop-blur-sm" onClick={() => setShowCleanupModal(false)}>
+        <section role="dialog" aria-modal="true" aria-labelledby="cleanup-assets-title" className="w-full max-w-md overflow-hidden rounded-xl border border-[#8a5d33]/45 bg-[#fff8e8]/95 shadow-2xl ring-1 ring-white/60 backdrop-blur-2xl" onClick={(event) => event.stopPropagation()}>
+          <header className="flex items-start justify-between gap-4 border-b border-[#8a5d33]/25 px-5 py-4">
+            <div><h2 id="cleanup-assets-title" className="text-lg font-semibold text-[#3d200a]">Delete assets</h2><p className="mt-1 text-xs text-[#8a5d33]">Choose one cleanup category. You will confirm before deletion.</p></div>
+            <button type="button" onClick={() => setShowCleanupModal(false)} aria-label="Close delete options" className="rounded-lg p-2 text-[#8a5d33] transition hover:bg-white/60"><X className="h-4 w-4" /></button>
+          </header>
+          <div className="space-y-3 px-5 py-5">
+            <div className="flex items-center gap-3 rounded-xl border border-red-300/60 bg-red-50/65 p-3">
+              <button type="button" disabled={expiredAssetIds.length === 0} onClick={() => { setShowCleanupModal(false); setPendingDeleteIds(expiredAssetIds); }} className="inline-flex h-10 flex-1 items-center justify-between rounded-lg bg-red-700 px-4 text-sm font-semibold text-white transition hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-40"><span>Delete DNS expired</span><span>{expiredAssetIds.length}</span></button>
+              <ActionTooltip content="Deletes domains whose latest discovery confirmed that DNS no longer resolves. Timeout assets are not included."><button type="button" aria-label="About deleting DNS expired assets" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-red-300 bg-white/75 text-red-700"><Info className="h-4 w-4" /></button></ActionTooltip>
+            </div>
+            <div className="flex items-center gap-3 rounded-xl border border-red-300/60 bg-red-50/65 p-3">
+              <button type="button" disabled={timeoutAssetIds.length === 0} onClick={() => { setShowCleanupModal(false); setPendingDeleteIds(timeoutAssetIds); }} className="inline-flex h-10 flex-1 items-center justify-between rounded-lg bg-red-700 px-4 text-sm font-semibold text-white transition hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-40"><span>Delete timeout</span><span>{timeoutAssetIds.length}</span></button>
+              <ActionTooltip content="Deletes assets whose latest port or TLS scan failed because the target did not respond in time. DNS-expired assets are excluded."><button type="button" aria-label="About deleting timeout assets" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-red-300 bg-white/75 text-red-700"><Info className="h-4 w-4" /></button></ActionTooltip>
+            </div>
+          </div>
         </section>
       </div>
     ), document.body)}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ShieldCheck, Info, Loader2, AlertTriangle, Search, Server, Telescope } from "lucide-react";
 import { PqcMethodologyModal } from "./PqcMethodologyModal";
 import { FirstScanAnalysisNotice } from "./OnboardingScanStatus";
+import { PqcScoreMeter } from "./PqcScoreMeter";
 
 interface PqcPostureProps {
   org: any;
@@ -158,17 +159,20 @@ export default function PqcPosture({ org }: PqcPostureProps) {
 
       <section className="overflow-hidden rounded-xl border border-white/60 bg-white/55 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">
         <div className="grid gap-5 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-base font-semibold text-slate-900">Organization readiness</h2>
-              <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-bold ${getTierColor(organization.tier)}`}>
-                Tier {organization.tier} · {organizationLabel}
-              </span>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-base font-semibold text-slate-900">Organization readiness</h2>
+                <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-bold ${getTierColor(organization.tier)}`}>
+                  Tier {organization.tier} · {organizationLabel}
+                </span>
+              </div>
+              <div className="flex items-center gap-6 text-sm text-slate-600">
+                <span><strong className={`text-xl ${scoreColor(organization.averageScore)}`}>{organization.averageScore}</strong> / 100</span>
+                <span><strong className="text-slate-900">{organization.totalPortsScored}</strong> ports assessed</span>
+              </div>
             </div>
-            <div className="flex items-center gap-6 text-sm text-slate-600">
-              <span><strong className={`text-xl ${scoreColor(organization.averageScore)}`}>{organization.averageScore}</strong> / 100</span>
-              <span><strong className="text-slate-900">{organization.totalPortsScored}</strong> ports assessed</span>
-            </div>
+            <PqcScoreMeter score={organization.averageScore} className="shrink-0" showValue={false} />
           </div>
 
           {tierTotal > 0 ? (

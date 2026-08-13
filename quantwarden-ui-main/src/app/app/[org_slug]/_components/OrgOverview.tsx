@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { FirstScanAnalysisNotice } from "./OnboardingScanStatus";
+import { PqcScoreMeter } from "./PqcScoreMeter";
 
 interface OrgOverviewProps {
   org: any;
@@ -915,6 +916,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
               <p className="mt-1 text-xs text-slate-500">{data.tier.portsScored} ports scored</p>
             </div>
           </div>
+          <PqcScoreMeter score={data.tier.score ?? 0} compact showValue={false} className="-mb-1 mt-1" />
           <div className="mt-auto flex items-center justify-between border-t border-slate-200 pt-3 text-xs">
             <span className="text-slate-600">Self-signed certificates</span>
             <Link href={`/app/${org.slug}/explore?selfSigned=true`} className={`font-semibold hover:underline ${data.selfSignedCount > 0 ? "text-amber-700" : "text-emerald-700"}`}>
