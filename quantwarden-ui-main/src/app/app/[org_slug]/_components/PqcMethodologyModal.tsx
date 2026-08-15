@@ -1,20 +1,37 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { ShieldCheck, X, AlertTriangle } from "lucide-react";
 
 export function PqcMethodologyModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
   const [infoTab, setInfoTab] = useState<"score" | "tier">("score");
   const [showPqcInfoTooltip, setShowPqcInfoTooltip] = useState(false);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!isOpen) return;
 
-  return (
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen || typeof document === "undefined") return null;
+
+  return createPortal(
     <>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-        <div className="pqc-modal-shell relative w-full max-w-2xl shadow-[0_28px_80px_rgba(43,20,0,0.36)] h-[650px] max-h-[85vh] flex flex-col overflow-hidden rounded-[1.25rem]">
+      <div className="fixed inset-0 z-[1000] flex min-h-dvh w-screen items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="pqc-methodology-title">
+        <div className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm" onClick={onClose} />
+        <div className="pqc-modal-shell relative flex h-[min(720px,90dvh)] w-full max-w-3xl flex-col overflow-hidden rounded-[1.25rem] shadow-[0_28px_80px_rgba(43,20,0,0.36)]">
           <div className="pqc-modal-header relative border-b border-[#8B0000]/20 flex flex-col z-10 shrink-0">
             <div className="relative px-6 pt-5 pb-3 flex justify-between items-center">
-              <h2 className="text-xl font-black text-white flex items-center gap-2.5">
+              <h2 id="pqc-methodology-title" className="text-xl font-black text-white flex items-center gap-2.5">
                 <ShieldCheck className="h-5 w-5 text-white/90" />
                 PQC Evaluation Engine
                 <div className="relative ml-1 flex items-center">
@@ -250,13 +267,12 @@ export function PqcMethodologyModal({ isOpen, onClose }: { isOpen: boolean, onCl
       </div>
       <style jsx global>{`
         .pqc-modal-shell {
-          border: 1px solid rgba(156, 197, 255, 0.55);
-          background-color: rgba(242, 248, 255, 0.95);
+          border: 1px solid rgba(138, 93, 51, 0.3);
+          background-color: rgba(255, 248, 225, 0.98);
           background-image:
-            radial-gradient(circle at 1px 1px, rgba(90, 0, 24, 0.42) 1.1px, transparent 1.2px),
-            linear-gradient(180deg, rgba(245, 250, 255, 0.97), rgba(252, 254, 255, 0.93));
-          background-size: 16px 16px, 100% 100%;
-          background-position: 0 0, 0 0;
+            linear-gradient(180deg, rgba(255, 252, 242, 0.98), rgba(255, 239, 195, 0.94));
+          background-size: 100% 100%;
+          background-position: 0 0;
         }
 
         .pqc-modal-header {
@@ -317,6 +333,7 @@ export function PqcMethodologyModal({ isOpen, onClose }: { isOpen: boolean, onCl
           }
         }
       `}</style>
-    </>
+    </>,
+    document.body
   );
 }

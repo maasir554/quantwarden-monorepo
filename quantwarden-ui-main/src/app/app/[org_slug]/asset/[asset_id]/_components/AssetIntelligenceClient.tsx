@@ -96,8 +96,17 @@ function DetailRow({
 }) {
   return (
     <div className="flex flex-col gap-1 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-      <p className="text-[11px] font-bold uppercase tracking-widest text-[#8a5d33]/55">{label}</p>
-      <div className="text-sm font-bold text-[#3d200a] sm:max-w-[70%] sm:text-right">{value}</div>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <div className="text-sm font-semibold text-slate-900 sm:max-w-[70%] sm:text-right">{value}</div>
+    </div>
+  );
+}
+
+function FactItem({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="min-w-0 border-b border-[#8a5d33]/15 py-3 last:border-b-0">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <div className="mt-1 break-words text-sm font-semibold text-slate-900">{value}</div>
     </div>
   );
 }
@@ -193,7 +202,7 @@ function DisclosureBlock({
         className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left"
       >
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/60">{title}</p>
+          <p className="text-sm font-semibold text-slate-900">{title}</p>
           {subtitle && <p className="mt-1 text-sm font-semibold text-[#8a5d33]/70">{subtitle}</p>}
         </div>
         <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-amber-200 bg-white text-[#8B0000]">
@@ -223,7 +232,7 @@ function AttributeTable({
         <tbody>
           {entries.map(([key, value]) => (
             <tr key={key} className="border-b border-amber-500/10 last:border-b-0">
-              <td className="w-[36%] px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-[#8a5d33]/55">{key}</td>
+              <td className="w-[36%] px-4 py-2.5 text-xs font-medium text-slate-500">{key}</td>
               <td className="px-4 py-2.5 text-sm font-semibold text-[#3d200a] break-all">{value}</td>
             </tr>
           ))}
@@ -249,9 +258,9 @@ function IdentifierTable({
       <table className="w-full border-collapse">
         <thead className="border-b border-amber-500/10 bg-white/65">
           <tr>
-            <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/55">Name</th>
-            <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/55">OID</th>
-            <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/55">IANA</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">Name</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">OID</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">IANA</th>
           </tr>
         </thead>
         <tbody>
@@ -407,7 +416,6 @@ export default function AssetIntelligenceClient({
   const [scanError, setScanError] = useState<string | null>(null);
   const [showPqcModal, setShowPqcModal] = useState(false);
   const [activeRecommendation, setActiveRecommendation] = useState<"keyExchange" | "symmetric" | "protocol" | "auth" | null>(null);
-  const [showQueriedGroups, setShowQueriedGroups] = useState(false);
   const [activeCertificateSection, setActiveCertificateSection] = useState<
     "subject" | "issuer" | "technical" | "identifiers" | "sans" | "chain" | null
   >(null);
@@ -525,8 +533,6 @@ export default function AssetIntelligenceClient({
     () => payload?.tls_versions.filter((probe) => probe.supported) || [],
     [payload]
   );
-  const featuredProbe = supportedProbes[0] || null;
-  const secondaryProbes = supportedProbes.slice(1);
   const assetScanActive = useMemo(
     () =>
       Boolean(
@@ -716,7 +722,6 @@ export default function AssetIntelligenceClient({
         <div className="flex flex-col gap-3 border-b border-[#8a5d33]/20 bg-white/15 px-4 py-3 sm:flex-row sm:items-center">
           <div className="shrink-0">
             <p className="text-xs font-semibold text-slate-900">Port scope</p>
-            <p className="text-[11px] text-slate-500">Each port keeps separate scan evidence.</p>
           </div>
           <div className="flex flex-wrap gap-2 sm:border-l sm:border-[#8a5d33]/20 sm:pl-4">
           {portTabs.map((portTab) => {
@@ -779,7 +784,7 @@ export default function AssetIntelligenceClient({
       )}
 
       {payload && summary ? (
-        <nav className="overflow-x-auto border-b border-[#8a5d33]/25 bg-white/15 px-3 pt-2" aria-label="Asset intelligence sections">
+        <nav className="scrollbar-hide overflow-x-auto overflow-y-hidden border-b border-[#8a5d33]/25 bg-white/15 px-3 pt-2" aria-label="Asset intelligence sections">
           <div className="flex min-w-max gap-1" role="tablist">
             {assetDetailTabs.map((tab) => {
               const Icon = tab.icon;
@@ -1012,31 +1017,31 @@ export default function AssetIntelligenceClient({
                 ) : null
               }
             >
-              <div className="divide-y divide-amber-500/10">
-                <DetailRow label="Subject Common Name" value={summary.noTlsDetected ? "No certificate detected" : summary.subjectCommonName || "Unknown"} />
-                <DetailRow label="Issuer Authority" value={issuerAuthorityLabel} />
-                <DetailRow label="Trust Level" value={summary.noTlsDetected ? "Not applicable" : summary.selfSignedCert ? "Self-Signed" : "Trusted CA"} />
-                <DetailRow label="DNS Status" value={summary.dnsMissing ? "Removed from DNS" : "Resolvable"} />
-                <DetailRow label="Valid From" value={summary.noTlsDetected ? "Not applicable" : certificate?.not_before || "Unknown"} />
-                <DetailRow label="Valid Until" value={summary.noTlsDetected ? "Not applicable" : certificate?.not_after || "Unknown"} />
-                <DetailRow label="SAN Coverage" value={`${summary.sanCount} domains`} />
-                <DetailRow label="Serial Number" value={summary.noTlsDetected ? "Not applicable" : certificate?.serial_number || "Unknown"} />
-              </div>
-              {!summary.noTlsDetected && (
-                <div className="mt-5 space-y-4">
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="custom-scrollbar rounded-xl border border-[#8a5d33]/20 bg-white/25 px-4 xl:max-h-[min(34rem,65vh)] xl:overflow-y-auto">
+                  <div className="grid gap-x-5 sm:grid-cols-2">
+                    <FactItem label="Subject common name" value={summary.noTlsDetected ? "No certificate detected" : summary.subjectCommonName || "Unknown"} />
+                    <FactItem label="Issuer authority" value={issuerAuthorityLabel} />
+                    <FactItem label="Trust level" value={summary.noTlsDetected ? "Not applicable" : summary.selfSignedCert ? "Self-signed" : "Trusted CA"} />
+                    <FactItem label="DNS status" value={summary.dnsMissing ? "Removed from DNS" : "Resolvable"} />
+                    <FactItem label="Valid from" value={summary.noTlsDetected ? "Not applicable" : certificate?.not_before || "Unknown"} />
+                    <FactItem label="Valid until" value={summary.noTlsDetected ? "Not applicable" : certificate?.not_after || "Unknown"} />
+                    <FactItem label="SAN coverage" value={`${summary.sanCount} domains`} />
+                    <FactItem label="Serial number" value={summary.noTlsDetected ? "Not applicable" : certificate?.serial_number || "Unknown"} />
+                  </div>
+                </div>
+                {!summary.noTlsDetected && (
+                  <div className="custom-scrollbar space-y-3 xl:max-h-[min(34rem,65vh)] xl:overflow-y-auto xl:pr-1">
                   <DisclosureBlock
                     title="Subject"
                     subtitle={summary.subjectCommonName || "Common name not reported"}
                     open={activeCertificateSection === "subject"}
                     onToggle={() => toggleCertificateSection("subject")}
                   >
-                    <div>
-                      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/60">Subject Attributes</p>
-                      <AttributeTable
-                        attributes={(certificate as any)?.subject_attributes}
-                        emptyLabel="No subject attributes reported."
-                      />
-                    </div>
+                    <AttributeTable
+                      attributes={(certificate as any)?.subject_attributes}
+                      emptyLabel="No subject attributes reported."
+                    />
                   </DisclosureBlock>
 
                   <DisclosureBlock
@@ -1045,13 +1050,10 @@ export default function AssetIntelligenceClient({
                     open={activeCertificateSection === "issuer"}
                     onToggle={() => toggleCertificateSection("issuer")}
                   >
-                    <div>
-                      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/60">Issuer Attributes</p>
-                      <AttributeTable
-                        attributes={(certificate as any)?.issuer_attributes}
-                        emptyLabel="No issuer attributes reported."
-                      />
-                    </div>
+                    <AttributeTable
+                      attributes={(certificate as any)?.issuer_attributes}
+                      emptyLabel="No issuer attributes reported."
+                    />
                   </DisclosureBlock>
 
                   <DisclosureBlock
@@ -1116,8 +1118,8 @@ export default function AssetIntelligenceClient({
                       <div className="max-h-[28rem] space-y-3 overflow-y-auto pr-1">
                         {certificateChain.map((entry, index) => (
                           <div key={`${entry.subject || "chain"}-${index}`} className="rounded-2xl border border-amber-200/60 bg-white/75 p-4">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/60">
-                              Chain Certificate {index + 1}
+                            <p className="text-xs font-medium text-slate-500">
+                              Chain certificate {index + 1}
                             </p>
                             <div className="mt-3 divide-y divide-amber-500/10">
                               <DetailRow label="Subject" value={entry.subject || "Unknown"} />
@@ -1136,22 +1138,20 @@ export default function AssetIntelligenceClient({
                       <p className="text-sm font-semibold text-[#8a5d33]/60">No certificate chain reported.</p>
                     )}
                   </DisclosureBlock>
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </SectionCard>
           )}
 
           {activeTab === "overview" && (
             <SectionCard title="Negotiation Highlights" icon={Activity}>
-              <div className="divide-y divide-amber-500/10">
-                <DetailRow label="Negotiated Cipher" value={summary.noTlsDetected ? "Not negotiated" : summary.negotiatedCipher || "Unknown"} />
-                <DetailRow
-                  label="Negotiated Group"
-                  value={displayNegotiatedGroup(summary.negotiatedGroup, summary.noTlsDetected)}
-                />
-                <DetailRow label="Supported TLS Versions" value={summary.supportedTlsVersions.join(", ") || "None"} />
-                <DetailRow label="Resolved IP" value={payload.resolved_ip || "Unknown"} />
-                <DetailRow label="Scanned At" value={formatScanTimestamp(payload.scanned_at)} />
+              <div className="grid gap-x-6 rounded-xl border border-[#8a5d33]/15 bg-white/20 px-4 sm:grid-cols-2 xl:grid-cols-3">
+                <FactItem label="Negotiated cipher" value={summary.noTlsDetected ? "Not negotiated" : summary.negotiatedCipher || "Unknown"} />
+                <FactItem label="Negotiated group" value={displayNegotiatedGroup(summary.negotiatedGroup, summary.noTlsDetected)} />
+                <FactItem label="Supported TLS versions" value={summary.supportedTlsVersions.join(", ") || "None"} />
+                <FactItem label="Resolved IP" value={payload.resolved_ip || "Unknown"} />
+                <FactItem label="Scanned at" value={formatScanTimestamp(payload.scanned_at)} />
               </div>
             </SectionCard>
           )}
@@ -1160,166 +1160,61 @@ export default function AssetIntelligenceClient({
             supportedProbes.length > 0 ? (
             <SectionCard title="TLS versions for this port" icon={Server}>
               <div className="space-y-4">
-                {featuredProbe && (
-                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                    <div className="rounded-2xl border border-amber-200/70 bg-[#fdf8f0]/70 p-5">
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <p className="text-xl font-black text-[#3d200a]">
-                        {featuredProbe.negotiated_protocol || featuredProbe.tls_version}
-                      </p>
-                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">
-                        Supported
-                      </span>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="space-y-2 text-sm font-semibold text-[#3d200a]">
-                        <p><span className="text-[#8a5d33]/65">Negotiated cipher:</span> {featuredProbe.negotiated_cipher || "Unknown"}</p>
-                        <p>
-                          <span className="text-[#8a5d33]/65">Negotiated group:</span>{" "}
-                          <span className={isMlkemValue(featuredProbe.negotiated_group) ? "font-black text-emerald-700" : ""}>
-                            {displayNegotiatedGroup(featuredProbe.negotiated_group)}
-                          </span>
-                        </p>
+                <div className="grid gap-4 xl:grid-cols-2">
+                  {supportedProbes.map((probe) => (
+                    <article key={probe.tls_version} className="min-w-0 rounded-xl border border-[#8a5d33]/20 bg-white/25 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#8a5d33]/15 pb-3">
+                        <h3 className="text-base font-semibold text-slate-900">
+                          {probe.negotiated_protocol || probe.tls_version}
+                        </h3>
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                          Supported
+                        </span>
                       </div>
-                      <div className="rounded-2xl border border-amber-200/60 bg-white/70 p-4">
-                        <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/60">Accepted Ciphers</p>
-                        {featuredProbe.accepted_ciphers_in_client_offer_order?.length ? (
-                          <div className="space-y-2">
-                            {featuredProbe.accepted_ciphers_in_client_offer_order.map((cipher, index) => (
-                              <div key={cipher} className="flex items-center gap-3 text-sm font-semibold text-[#3d200a]">
-                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-black text-[#8B0000] ring-1 ring-amber-200">
-                                  {index + 1}
-                                </span>
-                                <span className={`break-all ${isPreferredTlsCipher(cipher) ? "font-black text-emerald-700" : ""}`}>{cipher}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-sm font-semibold text-[#8a5d33]/60">No accepted cipher order reported for this version.</p>
-                        )}
+                      <div className="grid gap-x-5 sm:grid-cols-2">
+                        <FactItem label="Negotiated cipher" value={probe.negotiated_cipher || "Unknown"} />
+                        <FactItem
+                          label="Negotiated group"
+                          value={
+                            <span className={isMlkemValue(probe.negotiated_group) ? "text-emerald-700" : ""}>
+                              {displayNegotiatedGroup(probe.negotiated_group)}
+                            </span>
+                          }
+                        />
                       </div>
-                      <div className="space-y-4">
-                        <div className="rounded-2xl border border-amber-200/60 bg-white/70 p-4">
-                          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/60">Supported Groups (Key Exchange)</p>
+                      <div className="mt-4 grid min-w-0 gap-4 md:grid-cols-2">
+                        <div className="min-w-0">
+                          <p className="mb-2 text-xs font-medium text-slate-500">Accepted ciphers</p>
                           <ScrollValueTable
-                            values={getProbeKeyExchangeValues(featuredProbe, summary.supportedGroups)}
+                            values={probe.accepted_ciphers_in_client_offer_order || []}
+                            emptyLabel="No accepted cipher order reported."
+                            maxHeightClass="max-h-44"
+                            highlightValue={isPreferredTlsCipher}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="mb-2 text-xs font-medium text-slate-500">Key exchange groups</p>
+                          <ScrollValueTable
+                            values={getProbeKeyExchangeValues(probe, summary.supportedGroups)}
                             emptyLabel="No supported groups reported."
+                            maxHeightClass="max-h-44"
                             highlightValue={isMlkemValue}
                           />
                         </div>
-                        <div className="rounded-2xl border border-amber-200/60 bg-white/70 p-4">
-                          <button
-                            type="button"
-                            onClick={() => setShowQueriedGroups((value) => !value)}
-                            className="flex w-full items-center justify-between gap-3 text-left"
-                          >
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/60">Queried Groups</p>
-                              <p className="mt-1 text-xs font-semibold text-[#8a5d33]/60">
-                                {summary.queriedGroups.length} entries
-                              </p>
-                            </div>
-                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-amber-200 bg-white text-[#8B0000]">
-                              {showQueriedGroups ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                            </span>
-                          </button>
-                          {showQueriedGroups && (
-                            <div className="mt-4">
-                              <ScrollValueTable
-                                values={summary.queriedGroups}
-                                emptyLabel="No queried groups reported."
-                                highlightValue={isMlkemValue}
-                              />
-                            </div>
-                          )}
-                        </div>
                       </div>
-                    </div>
-                    </div>
-                    {secondaryProbes[0] && (
-                      <div className="rounded-2xl border border-amber-200/70 bg-[#fdf8f0]/70 p-5">
-                        <div className="mb-4 flex items-center justify-between gap-3">
-                          <p className="text-xl font-black text-[#3d200a]">
-                            {secondaryProbes[0].negotiated_protocol || secondaryProbes[0].tls_version}
-                          </p>
-                          <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">
-                            Supported
-                          </span>
-                        </div>
-                        <div className="space-y-2 text-sm font-semibold text-[#3d200a]">
-                          <p><span className="text-[#8a5d33]/65">Negotiated cipher:</span> {secondaryProbes[0].negotiated_cipher || "Unknown"}</p>
-                          <p><span className="text-[#8a5d33]/65">Negotiated group:</span> {displayNegotiatedGroup(secondaryProbes[0].negotiated_group)}</p>
-                        </div>
-                        <div className="mt-4 rounded-2xl border border-amber-200/60 bg-white/70 p-4">
-                          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/60">Accepted Ciphers</p>
-                          {secondaryProbes[0].accepted_ciphers_in_client_offer_order?.length ? (
-                            <div className="space-y-2">
-                              {secondaryProbes[0].accepted_ciphers_in_client_offer_order.map((cipher, index) => (
-                                <div key={cipher} className="flex items-center gap-3 text-sm font-semibold text-[#3d200a]">
-                                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-black text-[#8B0000] ring-1 ring-amber-200">
-                                    {index + 1}
-                                  </span>
-                                  <span className={`break-all ${isPreferredTlsCipher(cipher) ? "font-black text-emerald-700" : ""}`}>{cipher}</span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-sm font-semibold text-[#8a5d33]/60">No accepted cipher order reported for this version.</p>
-                          )}
-                        </div>
-                        <div className="mt-4 rounded-2xl border border-amber-200/60 bg-white/70 p-4">
-                          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/60">Supported Groups (Key Exchange)</p>
-                          <ScrollValueTable
-                            values={getProbeKeyExchangeValues(secondaryProbes[0], summary.supportedGroups)}
-                            emptyLabel="No supported groups reported for this version."
-                            maxHeightClass="max-h-40"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                    </article>
+                  ))}
+                </div>
 
-                {secondaryProbes.length > 1 && (
-                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                    {secondaryProbes.slice(1).map((probe) => (
-                      <div key={probe.tls_version} className="rounded-2xl border border-amber-200/70 bg-[#fdf8f0]/70 p-4">
-                        <div className="mb-3 flex items-center justify-between gap-3">
-                          <p className="text-sm font-black text-[#3d200a]">{probe.negotiated_protocol || probe.tls_version}</p>
-                          <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">
-                            Supported
-                          </span>
-                        </div>
-                        <div className="space-y-2 text-sm font-semibold text-[#3d200a]">
-                          <p><span className="text-[#8a5d33]/65">Negotiated cipher:</span> {probe.negotiated_cipher || "Unknown"}</p>
-                          <p><span className="text-[#8a5d33]/65">Negotiated group:</span> {displayNegotiatedGroup(probe.negotiated_group)}</p>
-                        </div>
-                        <div className="mt-4 space-y-2">
-                          {probe.accepted_ciphers_in_client_offer_order?.length ? (
-                            probe.accepted_ciphers_in_client_offer_order.slice(0, 8).map((cipher, index) => (
-                              <div key={cipher} className="flex items-center gap-3 text-sm font-semibold text-[#3d200a]">
-                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-black text-[#8B0000] ring-1 ring-amber-200">
-                                  {index + 1}
-                                </span>
-                                <span className={`break-all ${isPreferredTlsCipher(cipher) ? "font-black text-emerald-700" : ""}`}>{cipher}</span>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-sm font-semibold text-[#8a5d33]/60">No accepted cipher order reported for this version.</p>
-                          )}
-                        </div>
-                        <div className="mt-4 rounded-2xl border border-amber-200/60 bg-white/70 p-4">
-                          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/60">Supported Groups (Key Exchange)</p>
-                          <ScrollValueTable
-                            values={getProbeKeyExchangeValues(probe, summary.supportedGroups)}
-                            emptyLabel="No supported groups reported for this version."
-                            maxHeightClass="max-h-40"
-                          />
-                        </div>
-                      </div>
-                    ))}
+                <div className="rounded-xl border border-[#8a5d33]/20 bg-white/20 p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-900">Queried groups</p>
+                    <span className="text-xs font-medium text-slate-500">{summary.queriedGroups.length} entries</span>
                   </div>
-                )}
+                  <div className="custom-scrollbar max-h-32 overflow-y-auto pr-1">
+                    <ChipList values={summary.queriedGroups} emptyLabel="No queried groups reported." />
+                  </div>
+                </div>
               </div>
             </SectionCard>
             ) : (
@@ -1331,49 +1226,60 @@ export default function AssetIntelligenceClient({
 
           {activeTab === "algorithms" && (
             <SectionCard title="Cryptographic algorithms" icon={KeyRound}>
-              <div className="divide-y divide-[#8a5d33]/15">
-                <div className="grid gap-4 py-4 first:pt-0 lg:grid-cols-[220px_minmax(0,1fr)]">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Cipher preference order</p>
-                    <p className="mt-1 text-xs text-slate-500">Server-supported cipher order for this port.</p>
+              <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+                <article className="min-w-0 rounded-xl border border-[#8a5d33]/20 bg-white/25 p-4 lg:col-span-2">
+                  <div className="mb-3">
+                    <h3 className="text-sm font-semibold text-slate-900">Cipher preference order</h3>
+                    <p className="mt-1 text-xs text-slate-500">Server-supported order for this port.</p>
                   </div>
                   <ScrollValueTable values={summary.cipherPreferenceOrder} emptyLabel="No cipher preference order reported." highlightValue={isPreferredTlsCipher} />
-                </div>
-                <div className="grid gap-4 py-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Key exchange</p>
-                    <p className="mt-1 text-xs text-slate-500">Observed key establishment algorithms.</p>
+                </article>
+
+                {[
+                  {
+                    title: "Key exchange",
+                    description: "Observed key establishment algorithms.",
+                    values: summary.keyExchangeAlgorithms,
+                    empty: "No key exchange algorithms reported.",
+                  },
+                  {
+                    title: "Encryption",
+                    description: "Symmetric encryption algorithms.",
+                    values: summary.encryptionAlgorithms,
+                    empty: "No encryption algorithms reported.",
+                  },
+                  {
+                    title: "Signatures",
+                    description: "Authentication and certificate signatures.",
+                    values: summary.signatureAlgorithms,
+                    empty: "No signature algorithms reported.",
+                  },
+                  {
+                    title: "Supported groups",
+                    description: "Elliptic-curve and hybrid KEM groups.",
+                    values: summary.supportedGroups,
+                    empty: "No supported groups reported.",
+                  },
+                ].map((group) => (
+                  <article key={group.title} className="min-w-0 rounded-xl border border-[#8a5d33]/20 bg-white/25 p-4">
+                    <h3 className="text-sm font-semibold text-slate-900">{group.title}</h3>
+                    <p className="mb-3 mt-1 text-xs text-slate-500">{group.description}</p>
+                    <ChipList values={group.values} emptyLabel={group.empty} />
+                  </article>
+                ))}
+
+                <article className="min-w-0 rounded-xl border border-[#8a5d33]/20 bg-white/25 p-4 lg:col-span-2">
+                  <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-900">Queried groups</h3>
+                      <p className="mt-1 text-xs text-slate-500">Groups offered during capability probing.</p>
+                    </div>
+                    <span className="text-xs font-medium text-slate-500">{summary.queriedGroups.length} entries</span>
                   </div>
-                  <ChipList values={summary.keyExchangeAlgorithms} emptyLabel="No key exchange algorithms reported." />
-                </div>
-                <div className="grid gap-4 py-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Encryption</p>
-                    <p className="mt-1 text-xs text-slate-500">Symmetric encryption algorithms in the scan evidence.</p>
+                  <div className="custom-scrollbar max-h-36 overflow-y-auto pr-1">
+                    <ChipList values={summary.queriedGroups} emptyLabel="No queried groups reported." />
                   </div>
-                  <ChipList values={summary.encryptionAlgorithms} emptyLabel="No encryption algorithms reported." />
-                </div>
-                <div className="grid gap-4 py-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Signatures</p>
-                    <p className="mt-1 text-xs text-slate-500">Authentication and certificate signature algorithms.</p>
-                  </div>
-                  <ChipList values={summary.signatureAlgorithms} emptyLabel="No signature algorithms reported." />
-                </div>
-                <div className="grid gap-4 py-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Supported groups</p>
-                    <p className="mt-1 text-xs text-slate-500">Elliptic-curve and hybrid KEM groups.</p>
-                  </div>
-                  <ChipList values={summary.supportedGroups} emptyLabel="No supported groups reported." />
-                </div>
-                <div className="grid gap-4 py-4 last:pb-0 lg:grid-cols-[220px_minmax(0,1fr)]">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Queried groups</p>
-                    <p className="mt-1 text-xs text-slate-500">Groups offered during capability probing.</p>
-                  </div>
-                  <ChipList values={summary.queriedGroups} emptyLabel="No queried groups reported." />
-                </div>
+                </article>
               </div>
             </SectionCard>
           )}
@@ -1422,7 +1328,7 @@ export default function AssetIntelligenceClient({
               }
             >
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative">
-                <div className="col-span-1 flex flex-col items-center justify-center p-6 bg-linear-to-b from-[#fffcf2] to-[#fff1cc]/40 rounded-2xl border border-amber-500/20 shadow-sm relative overflow-hidden h-full min-h-[300px]">
+                <div className="relative col-span-1 flex h-full min-h-[300px] flex-col items-center justify-center overflow-hidden rounded-xl border border-[#8a5d33]/25 bg-white/25 p-6">
                   <div className="mb-4 text-center">
                     <h3 className="text-xl font-black text-[#3d200a]">Tier {pqcAssessment.tier}</h3>
                     <p className={`text-[10px] font-black uppercase tracking-widest mt-1 ${pqcAssessment.score >= 90 ? 'text-emerald-700' : pqcAssessment.score >= 75 ? 'text-blue-700' : pqcAssessment.score >= 50 ? 'text-amber-600' : 'text-red-700'}`}>
@@ -1433,9 +1339,9 @@ export default function AssetIntelligenceClient({
                 </div>
                 
                 <div className="col-span-1 lg:col-span-2 flex flex-col gap-3">
-                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/55 ml-1">Evaluation Breakdown</h3>
+                  <h3 className="ml-1 text-sm font-semibold text-slate-900">Evaluation breakdown</h3>
                   
-                  <div className="flex items-center justify-between p-4 rounded-xl border border-amber-500/10 bg-white/75">
+                  <div className="flex items-center justify-between rounded-xl border border-[#8a5d33]/20 bg-white/25 p-4">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${pqcAssessment.breakdown.keyExchange.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-50 text-red-700'}`}>1</span>
@@ -1452,7 +1358,7 @@ export default function AssetIntelligenceClient({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 rounded-xl border border-amber-500/10 bg-white/75">
+                  <div className="flex items-center justify-between rounded-xl border border-[#8a5d33]/20 bg-white/25 p-4">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${pqcAssessment.breakdown.symmetric.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-50 text-red-700'}`}>2</span>
@@ -1469,7 +1375,7 @@ export default function AssetIntelligenceClient({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 rounded-xl border border-amber-500/10 bg-white/75">
+                  <div className="flex items-center justify-between rounded-xl border border-[#8a5d33]/20 bg-white/25 p-4">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${pqcAssessment.breakdown.protocol.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-50 text-red-700'}`}>3</span>
@@ -1486,7 +1392,7 @@ export default function AssetIntelligenceClient({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 rounded-xl border border-amber-500/10 bg-white/75">
+                  <div className="flex items-center justify-between rounded-xl border border-[#8a5d33]/20 bg-white/25 p-4">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${pqcAssessment.breakdown.auth.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>4</span>
