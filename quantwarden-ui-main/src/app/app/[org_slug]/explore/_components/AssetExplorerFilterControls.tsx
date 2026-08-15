@@ -15,7 +15,6 @@ import {
   LockKeyhole,
   LucideIcon,
   Network,
-  Search,
   Shield,
   ShieldCheck,
   SlidersHorizontal,
@@ -64,9 +63,9 @@ function LabeledSelect({
   const showIconInField = Boolean(!label && Icon);
 
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("space-y-1.5", className)}>
       {label ? (
-        <p className={cn("flex items-center gap-2 text-sm font-bold text-[#7a1f1f]", labelClassName)}>
+        <p className={cn("flex items-center gap-2 text-xs font-semibold text-slate-700", labelClassName)}>
           {showIconInLabel ? <Icon className="h-4 w-4 shrink-0" /> : null}
           <span>{label}</span>
         </p>
@@ -77,7 +76,7 @@ function LabeledSelect({
       >
         <SelectTrigger
           className={cn(
-            "h-12 w-full rounded-2xl px-3 text-left text-xs font-bold shadow-none transition-colors",
+            "h-10 w-full rounded-lg border-[#8a5d33]/30 px-3 text-left text-xs font-semibold shadow-none transition-colors",
             showIconInField
               ? "[&>span]:flex [&>span]:min-w-0 [&>span]:items-center [&>span]:gap-2.5 [&>span]:overflow-hidden [&>span]:whitespace-nowrap"
               : "",
@@ -147,8 +146,8 @@ function MultiSelectFilter({
   const showIconInField = Boolean(!label && Icon);
 
   return (
-    <div className="space-y-2">
-      <p className={cn("flex items-center gap-2 text-sm font-bold text-[#7a1f1f]", labelClassName)}>
+    <div className="space-y-1.5">
+      <p className={cn("flex items-center gap-2 text-xs font-semibold text-slate-700", labelClassName)}>
         {showIconInLabel ? <Icon className="h-4 w-4 shrink-0" /> : null}
         <span>{label}</span>
       </p>
@@ -157,7 +156,7 @@ function MultiSelectFilter({
           <button
             type="button"
             className={cn(
-              "flex h-16 w-full items-center justify-between rounded-2xl border px-3 text-left text-xs font-bold shadow-none transition-colors",
+              "flex h-12 w-full items-center justify-between rounded-lg border px-3 text-left text-xs font-semibold shadow-none transition-colors",
               isFiltered
                 ? "border-[#163b73]/40 bg-[#163b73]/92 text-white hover:border-[#163b73]/60"
                 : "border-white/60 bg-white/80 text-[#3d200a] hover:border-[#8B0000]/25"
@@ -225,8 +224,6 @@ function MultiSelectFilter({
 }
 
 export default function AssetExplorerFilterControls({
-  search,
-  setSearch,
   dnsState,
   setDnsState,
   tls,
@@ -284,20 +281,6 @@ export default function AssetExplorerFilterControls({
   return (
     <>
       <div className="grid gap-3 xl:grid-cols-12">
-        <div className="space-y-2 xl:col-span-5">
-          <p className="flex items-center gap-2 text-sm font-bold text-[#7a1f1f]">
-            <Search className="h-4 w-4 shrink-0" />
-            <span>Search</span>
-          </p>
-          <input
-            type="text"
-            placeholder="Search domains, IP addresses, or known TLS details"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="h-12 w-full rounded-2xl border border-white/60 bg-white/80 px-4 text-sm font-semibold text-[#3d200a] placeholder:text-[#8a5d33]/55 outline-none transition-all focus:border-[#8B0000]/30 focus:ring-2 focus:ring-[#8B0000]/10"
-          />
-        </div>
-
         <LabeledSelect
           label="DNS status"
           value={dnsState}
@@ -305,7 +288,7 @@ export default function AssetExplorerFilterControls({
           options={dnsOptions}
           allLabel="Any DNS status"
           icon={Globe}
-          className="xl:col-span-2"
+          className="xl:col-span-3"
         />
 
         <LabeledSelect
@@ -325,7 +308,7 @@ export default function AssetExplorerFilterControls({
           options={keySizeOptions}
           allLabel="Any certificate key size"
           icon={KeyRound}
-          className="xl:col-span-2"
+          className="xl:col-span-3"
         />
 
         <LabeledSelect
@@ -355,7 +338,7 @@ export default function AssetExplorerFilterControls({
           options={cipherOptions}
           allLabel="Any cipher suite"
           icon={LockKeyhole}
-          className="xl:col-span-3"
+          className="xl:col-span-4"
         />
 
         <LabeledSelect
@@ -365,16 +348,16 @@ export default function AssetExplorerFilterControls({
           options={portOptions}
           allLabel="Any TLS port"
           icon={Network}
-          className="xl:col-span-2"
+          className="xl:col-span-4"
         />
 
-        <div className="space-y-2 xl:col-span-4">
-          <p className="text-sm font-bold text-[#7a1f1f]">Advanced</p>
+        <div className="space-y-1.5 xl:col-span-4">
+          <p className="text-xs font-semibold text-slate-700">Advanced</p>
           <button
             type="button"
             onClick={() => setShowAdvancedFilters((current) => !current)}
             className={cn(
-              "flex h-12 w-full items-center justify-between rounded-2xl border px-3 text-left text-xs font-bold transition-colors",
+              "flex h-10 w-full items-center justify-between rounded-lg border px-3 text-left text-xs font-semibold transition-colors",
               showAdvancedFilters
                 ? "border-[#7a1f1f]/70 bg-[#7a1f1f] text-white"
                 : "border-white/60 bg-white/80 text-[#3d200a] hover:border-[#8B0000]/25"

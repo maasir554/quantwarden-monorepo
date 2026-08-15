@@ -94,7 +94,6 @@ export default function AssetExplorerClientImpl({
   const [loading, setLoading] = useState(true);
   const [assets, setAssets] = useState<any[]>([]);
   const [usesEndpointMatching, setUsesEndpointMatching] = useState(false);
-  const [expandedAssetIds, setExpandedAssetIds] = useState<Record<string, boolean>>({});
   const [showScrollCapsules, setShowScrollCapsules] = useState(false);
   const [isCapsuleSearchOpen, setIsCapsuleSearchOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -369,7 +368,6 @@ export default function AssetExplorerClientImpl({
         if (mounted) {
           setAssets(json.assets || []);
           setUsesEndpointMatching(Boolean(json.usesEndpointMatching));
-          setExpandedAssetIds({});
           if (json.filterOptions) setFilterOptions(json.filterOptions);
         }
       } catch (error) {
@@ -520,13 +518,6 @@ export default function AssetExplorerClientImpl({
     }
 
     setter([...selected, value]);
-  };
-
-  const toggleAssetExpansion = (assetId: string) => {
-    setExpandedAssetIds((current) => ({
-      ...current,
-      [assetId]: !current[assetId],
-    }));
   };
 
   const searchedAssets = useMemo(
@@ -722,23 +713,20 @@ export default function AssetExplorerClientImpl({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 14, scale: 0.985 }}
                 transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-                className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-[32px] border border-white/70 bg-[rgba(255,248,228,0.92)] shadow-2xl shadow-amber-950/20 backdrop-blur-2xl"
+                className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-xl border border-[#8a5d33]/35 bg-[rgba(255,248,228,0.94)] shadow-2xl shadow-amber-950/20 backdrop-blur-2xl"
                 onClick={(event) => event.stopPropagation()}
               >
-                <div className="flex items-start justify-between gap-4 border-b border-amber-500/10 px-5 py-4 sm:px-6">
+                <div className="flex items-start justify-between gap-4 border-b border-[#8a5d33]/25 px-5 py-4">
                   <div>
-                    <p className="text-sm font-bold text-[#7a1f1f]">Filters</p>
-                    <h3 className="mt-1 text-xl font-bold text-[#3d200a]">Adjust the explorer without losing your place</h3>
-                    <p className="mt-1 text-sm font-medium text-[#6d3f1d]/85">
-                      Filter changes stay shareable through the URL. Search refines the current results instantly on this page.
-                    </p>
+                    <h3 className="text-lg font-semibold text-slate-950">Filter assets and ports</h3>
+                    <p className="mt-1 text-sm text-slate-600">DNS, TLS, certificate, scan, and PQC conditions.</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {activeFilterCount > 0 ? (
                       <button
                         type="button"
                         onClick={resetFilters}
-                        className="inline-flex h-10 items-center gap-2 rounded-full border border-[#8B0000]/15 bg-white/80 px-4 text-sm font-bold text-[#8B0000] transition hover:bg-white"
+                        className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#8B0000]/20 bg-white/60 px-3 text-sm font-semibold text-[#8B0000] transition hover:bg-white/80"
                       >
                         <RefreshCcw className="h-4 w-4" />
                         Reset
@@ -747,14 +735,14 @@ export default function AssetExplorerClientImpl({
                     <button
                       type="button"
                       onClick={() => setIsFilterModalOpen(false)}
-                      className="flex h-10 w-10 items-center justify-center rounded-full border border-white/75 bg-white/85 text-[#7a1f1f] transition hover:bg-white"
+                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#8a5d33]/30 bg-white/60 text-[#7a1f1f] transition hover:bg-white/80"
                     >
                       <X className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
 
-                <div className="max-h-[calc(90vh-5.5rem)] overflow-y-auto px-5 py-5 sm:px-6">
+                <div className="max-h-[calc(90vh-5rem)] overflow-y-auto p-5">
                   <AssetExplorerFilterControls
                     search={search}
                     setSearch={setSearch}
@@ -836,98 +824,44 @@ export default function AssetExplorerClientImpl({
           </p>
         </div>
 
-        <div ref={filterPanelRef} className="mb-8 rounded-[30px] border border-white/55 bg-white/45 p-4 shadow-sm ring-1 ring-amber-500/10 backdrop-blur-xl sm:p-5">
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-              <div>
-                <p className="text-sm font-bold text-[#7a1f1f]">
-                  Find and filter
-                </p>
-                <h2 className="mt-1 text-lg font-bold text-[#3d200a]">
-                  Search by asset name, TLS posture, and post-quantum handshake details.
-                </h2>
-                <p className="mt-1 text-sm font-medium text-[#6d3f1d]/85">
-                  Filters stay shareable through the URL. Search narrows the current results instantly on this page.
-                </p>
-              </div>
+        <div ref={filterPanelRef} className="mb-6 rounded-xl border border-[#8a5d33]/30 bg-white/30 p-3 shadow-sm backdrop-blur-xl">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-lg border border-[#8a5d33]/30 bg-white/60 px-3 focus-within:border-[#8B0000]/50 focus-within:ring-2 focus-within:ring-[#8B0000]/10">
+              <Search className="h-4 w-4 shrink-0 text-slate-500" />
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search domains, IP addresses, ports, or TLS details"
+                className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-900 outline-none placeholder:text-slate-500"
+              />
+              {hasSearch ? (
+                <button type="button" onClick={() => setSearch("")} aria-label="Clear search" className="rounded-md p-1 text-slate-400 hover:bg-white/60 hover:text-slate-700">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+            </label>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="rounded-full bg-white/75 px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-[#8a5d33]">
-                  {activeFilterCount === 0
-                    ? hasSearch
-                      ? "Live search active"
-                      : "Showing all assets"
-                    : hasSearch
-                      ? `${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"} + search`
-                      : `${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}`}
-                </div>
-                {activeFilterCount > 0 || hasSearch ? (
-                  <button
-                    type="button"
-                    onClick={resetFilters}
-                    className="inline-flex items-center gap-2 rounded-full border border-[#8B0000]/15 bg-white/75 px-4 py-2 text-sm font-bold text-[#8B0000] transition-colors hover:border-[#8B0000]/30 hover:bg-white"
-                  >
-                    <RefreshCcw className="h-4 w-4" />
-                    Reset filters
-                  </button>
-                ) : null}
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsFilterModalOpen(true)}
+              className={cn(
+                "inline-flex h-11 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-semibold shadow-sm transition",
+                activeFilterCount > 0
+                  ? "border-[#163b73]/55 bg-[#163b73] text-white hover:bg-[#102f5e]"
+                  : "border-[#8a5d33]/30 bg-white/55 text-slate-800 hover:bg-white/80"
+              )}
+            >
+              <Filter className="h-4 w-4" />
+              Filters
+              {activeFilterCount > 0 ? <span className="rounded-full bg-white/18 px-2 py-0.5 text-xs">{activeFilterCount}</span> : null}
+            </button>
 
-            <AssetExplorerFilterControls
-              search={search}
-              setSearch={setSearch}
-              dnsState={dnsState}
-              setDnsState={setDnsState}
-              tls={tls}
-              setTls={setTls}
-              keySize={keySize}
-              setKeySize={setKeySize}
-              signatureAlgorithm={signatureAlgorithm}
-              setSignatureAlgorithm={setSignatureAlgorithm}
-              port={port}
-              setPort={setPort}
-              certExpiry={certExpiry}
-              setCertExpiry={setCertExpiry}
-              cipher={cipher}
-              setCipher={setCipher}
-              timeoutOnly={timeoutOnly}
-              setTimeoutOnly={setTimeoutOnly}
-              noTlsOnly={noTlsOnly}
-              setNoTlsOnly={setNoTlsOnly}
-              pqcSupportedOnly={pqcSupportedOnly}
-              setPqcSupportedOnly={setPqcSupportedOnly}
-              pqcNegotiatedOnly={pqcNegotiatedOnly}
-              setPqcNegotiatedOnly={setPqcNegotiatedOnly}
-              pqcTier={pqcTier}
-              setPqcTier={setPqcTier}
-              scanStatus={scanStatus}
-              setScanStatus={setScanStatus}
-              bucket={bucket}
-              setBucket={setBucket}
-              kexAlgorithms={kexAlgorithms}
-              setKexAlgorithms={setKexAlgorithms}
-              kexGroups={kexGroups}
-              setKexGroups={setKexGroups}
-              filterOptions={filterOptions}
-              dnsOptions={dnsOptions}
-              tlsVersionOptions={tlsVersionOptions}
-              keySizeOptions={keySizeOptions}
-              portOptions={portOptions}
-              certExpiryOptions={certExpiryOptions}
-              signatureAlgorithmOptions={signatureAlgorithmOptions}
-              cipherOptions={cipherOptions}
-              bucketOptions={bucketOptions}
-              scanResultOptions={scanResultOptions}
-              scanStatusOptions={scanStatusOptions}
-              tlsPresenceOptions={tlsPresenceOptions}
-              kyberSupportOptions={kyberSupportOptions}
-              kyberNegotiationOptions={kyberNegotiationOptions}
-              activeAdvancedFilterCount={activeAdvancedFilterCount}
-              showAdvancedFilters={showAdvancedFilters}
-              setShowAdvancedFilters={setShowAdvancedFilters}
-              toggleSelection={toggleSelection}
-            />
+            {activeFilterCount > 0 || hasSearch ? (
+              <button type="button" onClick={resetFilters} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold text-[#8B0000] transition hover:bg-white/40">
+                <RefreshCcw className="h-4 w-4" /> Reset
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -954,9 +888,7 @@ export default function AssetExplorerClientImpl({
           ) : (
             <AssetExplorerAssetList
               assets={paginatedAssets}
-              expandedAssetIds={expandedAssetIds}
               matchingEndpointCount={matchingEndpointCount}
-              onToggleAssetExpansion={toggleAssetExpansion}
               orgSlug={org.slug}
               totalMatch={totalMatch}
               usesEndpointMatching={usesEndpointMatching}
