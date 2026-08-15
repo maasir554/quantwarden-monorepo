@@ -38,84 +38,27 @@ function SectionCard({
   title,
   icon: Icon,
   children,
-  scrollable = false,
-  maxHeightClass,
   headerActions,
   id,
 }: {
   title: string;
-  icon: any;
+  icon: typeof Activity;
   children: ReactNode;
   scrollable?: boolean;
   maxHeightClass?: string;
   headerActions?: ReactNode;
   id?: string;
 }) {
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const [showTopFade, setShowTopFade] = useState(false);
-  const [showBottomFade, setShowBottomFade] = useState(false);
-
-  useEffect(() => {
-    if (!scrollable) return;
-
-    const element = scrollContainerRef.current;
-    if (!element) return;
-
-    const updateFades = () => {
-      const { scrollTop, scrollHeight, clientHeight } = element;
-      setShowTopFade(scrollTop > 6);
-      setShowBottomFade(scrollTop + clientHeight < scrollHeight - 6);
-    };
-
-    updateFades();
-    element.addEventListener("scroll", updateFades, { passive: true });
-    window.addEventListener("resize", updateFades);
-
-    return () => {
-      element.removeEventListener("scroll", updateFades);
-      window.removeEventListener("resize", updateFades);
-    };
-  }, [children, maxHeightClass, scrollable]);
-
-  if (scrollable) {
-    return (
-      <section id={id} className={`flex min-h-0 flex-col overflow-hidden rounded-3xl border border-amber-500/15 bg-white/55 shadow-sm ring-1 ring-white/30 backdrop-blur-xl ${maxHeightClass || "h-[28rem]"}`}>
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-amber-500/10 bg-[#fff6de] px-5 py-5">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[#8B0000]/10 text-[#8B0000]">
-              <Icon className="h-4.5 w-4.5" />
-            </div>
-            <h2 className="text-base font-black tracking-tight text-[#3d200a]">{title}</h2>
-          </div>
-          {headerActions}
-        </div>
-        <div className="relative min-h-0 flex-1 overflow-hidden">
-          <div ref={scrollContainerRef} className="h-full overflow-y-auto p-5">
-            {children}
-          </div>
-          {showTopFade && (
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-linear-to-b from-[#fff2cc] to-transparent" />
-          )}
-          {showBottomFade && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-[#ffe7a3] to-transparent" />
-          )}
-        </div>
-      </section>
-    );
-  }
-
   return (
-    <section id={id} className="rounded-3xl border border-amber-500/15 bg-white/55 p-5 shadow-sm ring-1 ring-white/30 backdrop-blur-xl">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <section id={id} className="overflow-hidden rounded-xl border border-[#8a5d33]/25 bg-white/30">
+      <div className="flex items-center justify-between gap-3 border-b border-[#8a5d33]/20 bg-white/20 px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[#8B0000]/10 text-[#8B0000]">
-            <Icon className="h-4.5 w-4.5" />
-          </div>
-          <h2 className="text-base font-black tracking-tight text-[#3d200a]">{title}</h2>
+          <Icon className="h-4 w-4 text-[#8B0000]" />
+          <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
         </div>
         {headerActions}
       </div>
-      {children}
+      <div className="p-4 sm:p-5">{children}</div>
     </section>
   );
 }
@@ -129,20 +72,16 @@ function MetricCard({
 }: {
   label: ReactNode;
   value: ReactNode;
-  icon: any;
+  icon: typeof Activity;
   toneClass: string;
   title?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-amber-500/10 bg-white/70 p-4 shadow-sm">
-      <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#8a5d33]/55">
-        {label}
-      </div>
-      <div className="mt-3 flex items-center gap-3">
-        <Icon className={`h-5 w-5 shrink-0 ${toneClass}`} />
-        <div className="min-w-0 truncate text-base font-black text-[#3d200a]" title={title}>
-          {value}
-        </div>
+    <div className="flex min-w-0 items-start gap-3 border-b border-[#8a5d33]/15 py-3 last:border-b-0 md:[&:nth-last-child(-n+2)]:border-b-0">
+      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${toneClass}`} />
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</div>
+        <div className="mt-1 truncate text-sm font-semibold text-slate-900" title={title}>{value}</div>
       </div>
     </div>
   );
@@ -162,6 +101,20 @@ function DetailRow({
     </div>
   );
 }
+
+type AssetDetailTab = "overview" | "certificate" | "tls" | "algorithms" | "pqc";
+
+const assetDetailTabs: Array<{
+  key: AssetDetailTab;
+  label: string;
+  icon: typeof Activity;
+}> = [
+  { key: "overview", label: "Overview", icon: Activity },
+  { key: "certificate", label: "Certificate", icon: Globe },
+  { key: "tls", label: "TLS versions", icon: Lock },
+  { key: "algorithms", label: "Algorithms", icon: KeyRound },
+  { key: "pqc", label: "PQC insights", icon: ShieldCheck },
+];
 
 function ChipList({ values, emptyLabel }: { values: string[]; emptyLabel: string }) {
   if (values.length === 0) {
@@ -441,6 +394,7 @@ export default function AssetIntelligenceClient({
 }: any) {
   const router = useRouter();
   const [scans, setScans] = useState(initialScans || []);
+  const [activeTab, setActiveTab] = useState<AssetDetailTab>("overview");
   const requestedPortKey = useMemo(
     () => normalizeRequestedPortKey(initialSelectedPortQuery),
     [initialSelectedPortQuery]
@@ -571,20 +525,8 @@ export default function AssetIntelligenceClient({
     () => payload?.tls_versions.filter((probe) => probe.supported) || [],
     [payload]
   );
-  const featuredProbe = useMemo(() => {
-    if (supportedProbes.length === 0) return null;
-    return (
-      supportedProbes.find((probe) => {
-        const versionLabel = probe.negotiated_protocol || probe.tls_version || "";
-        return versionLabel.includes("1.3");
-      }) ||
-      supportedProbes[0]
-    );
-  }, [supportedProbes]);
-  const secondaryProbes = useMemo(
-    () => supportedProbes.filter((probe) => probe !== featuredProbe),
-    [featuredProbe, supportedProbes]
-  );
+  const featuredProbe = supportedProbes[0] || null;
+  const secondaryProbes = supportedProbes.slice(1);
   const assetScanActive = useMemo(
     () =>
       Boolean(
@@ -676,8 +618,8 @@ export default function AssetIntelligenceClient({
   );
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col px-6 py-8 sm:px-8">
-      <div className="mb-6">
+    <div className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col px-4 py-6 sm:px-6">
+      <div className="mb-4">
         <Link
           href={`/app/${org.slug}/explore`}
           className="inline-flex items-center gap-2 text-sm font-bold text-[#8a5d33]/60 transition-colors hover:text-[#8a5d33]"
@@ -687,11 +629,11 @@ export default function AssetIntelligenceClient({
         </Link>
       </div>
 
-      <div className="mb-8 rounded-[2rem] border border-white/40 bg-white/35 p-6 shadow-xl ring-1 ring-amber-500/10 backdrop-blur-xl sm:p-8">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+      <header className="mb-4 flex flex-col gap-4 border-b border-[#8a5d33]/25 pb-5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex min-w-0 flex-1 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
-            <div className="mb-3 flex flex-wrap items-center gap-3">
-              <h1 className="truncate text-3xl font-black tracking-tight text-[#3d200a] sm:text-4xl">{asset.value}</h1>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <h1 className="truncate text-2xl font-bold tracking-tight text-[#3d200a]">{asset.value}</h1>
               <span className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest ${asset.isRoot ? "bg-amber-100 text-amber-700" : "bg-[#8B0000]/10 text-[#8B0000]"}`}>
                 {asset.isRoot ? "Root" : "Leaf"}
               </span>
@@ -701,15 +643,10 @@ export default function AssetIntelligenceClient({
               <span className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest ${scanStatusTone}`}>
                 {opensslRollup.scanStatus === "expired" ? "dns expired" : opensslRollup.scanStatus === "noTls" ? "no tls" : opensslRollup.scanStatus === "completed" ? "completed" : opensslRollup.scanStatus === "failed" ? "failed" : latestScan?.status || "unscanned"}
               </span>
-              {selectedPortTab && (
-                <span className="rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-[#3d200a]">
-                  {selectedPortTab.label}
-                </span>
-              )}
               {pqcAssessment && (
                 <button
-                  onClick={() => document.getElementById('pqc-insights')?.scrollIntoView({ behavior: 'smooth' })}
-                  className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest border transition-all hover:scale-105 ${
+                  onClick={() => setActiveTab("pqc")}
+                  className={`rounded-full border px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest transition ${
                     pqcAssessment.tier === 'A' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' :
                     pqcAssessment.tier === 'B' ? 'bg-blue-100 text-blue-700 border-blue-300' :
                     pqcAssessment.tier === 'C' ? 'bg-amber-100 text-amber-700 border-amber-300' :
@@ -721,7 +658,7 @@ export default function AssetIntelligenceClient({
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-semibold text-[#8a5d33]/75">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs font-medium text-slate-600">
               <span>Added on {new Date(asset.createdAt).toLocaleDateString()}</span>
               <span>Last scan: {formatScanTimestamp(opensslRollup.lastScanDate ? String(opensslRollup.lastScanDate) : null)}</span>
               {payload?.resolved_ip && <span>Resolved IP: {payload.resolved_ip}</span>}
@@ -744,7 +681,7 @@ export default function AssetIntelligenceClient({
               <button
                 onClick={handleDiscover}
                 disabled={isDiscovering || isScanning}
-                className="flex items-center gap-2 rounded-2xl border border-white/60 bg-white/60 px-4 py-3 text-sm font-bold text-[#8B0000] transition-all hover:bg-white disabled:opacity-50"
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#8a5d33]/35 bg-white/55 px-4 text-sm font-semibold text-[#8B0000] shadow-sm backdrop-blur transition hover:bg-white/80 disabled:opacity-50"
               >
                 {isDiscovering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Network className="h-4 w-4" />}
                 Deep Discover
@@ -754,7 +691,7 @@ export default function AssetIntelligenceClient({
               <button
                 onClick={handleScan}
                 disabled={isDiscovering || isScanning || isCreatingBatch || assetScanActive || activity?.lock.active}
-                className="flex items-center gap-2 rounded-2xl bg-linear-to-r from-[#8B0000] to-[rgb(110,0,0)] px-4 py-3 text-sm font-bold text-white transition-all hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-50"
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#8B0000] px-4 text-sm font-semibold text-white transition hover:bg-[#730000] disabled:opacity-50"
               >
                 {isScanning || isCreatingBatch || assetScanActive ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 {activity?.lock.active ? "Scan Locked" : isCreatingBatch ? "Starting Scan..." : assetScanActive ? "Scan Running" : "Re-Scan TLS"}
@@ -764,7 +701,7 @@ export default function AssetIntelligenceClient({
               <button
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="rounded-2xl border border-red-200/80 bg-white/55 p-3 text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-200/80 bg-white/55 text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -772,10 +709,16 @@ export default function AssetIntelligenceClient({
             </div>
           )}
         </div>
-      </div>
+      </header>
 
+      <section className="overflow-hidden rounded-xl border border-[#8a5d33]/35 bg-white/25 shadow-sm ring-1 ring-white/30 backdrop-blur-xl">
       {portTabs.length > 0 && (
-        <div className="mb-6 flex flex-wrap gap-2">
+        <div className="flex flex-col gap-3 border-b border-[#8a5d33]/20 bg-white/15 px-4 py-3 sm:flex-row sm:items-center">
+          <div className="shrink-0">
+            <p className="text-xs font-semibold text-slate-900">Port scope</p>
+            <p className="text-[11px] text-slate-500">Each port keeps separate scan evidence.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 sm:border-l sm:border-[#8a5d33]/20 sm:pl-4">
           {portTabs.map((portTab) => {
             const isActive = selectedPortTab?.key === portTab.key;
             const tone =
@@ -831,8 +774,41 @@ export default function AssetIntelligenceClient({
               </button>
             );
           })}
+          </div>
         </div>
       )}
+
+      {payload && summary ? (
+        <nav className="overflow-x-auto border-b border-[#8a5d33]/25 bg-white/15 px-3 pt-2" aria-label="Asset intelligence sections">
+          <div className="flex min-w-max gap-1" role="tablist">
+            {assetDetailTabs.map((tab) => {
+              const Icon = tab.icon;
+              const active = activeTab === tab.key;
+              const disabled = tab.key === "pqc" && !pqcAssessment;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  disabled={disabled}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`-mb-px inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                    active
+                      ? "border-[#8B0000] text-[#8B0000]"
+                      : "border-transparent text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      ) : null}
+
+      <div className="p-4 sm:p-5">
 
       {!selectedPortTab ? (
         <div className="flex h-56 items-center justify-center rounded-[2rem] border-2 border-dashed border-amber-500/20 bg-amber-50/50">
@@ -895,8 +871,8 @@ export default function AssetIntelligenceClient({
           The stored scan payload could not be interpreted as an OpenSSL profile.
         </div>
       ) : (
-        <div className="space-y-6 pb-10">
-          {summary.noTlsDetected && (
+        <div className="space-y-5">
+          {activeTab === "overview" && summary.noTlsDetected && (
             <div className="rounded-3xl border border-red-200 bg-red-50 p-5">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
@@ -914,7 +890,26 @@ export default function AssetIntelligenceClient({
               </div>
             </div>
           )}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {activeTab === "overview" && (
+          <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+            <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-[#8a5d33]/25 bg-white/30 p-5">
+              {pqcAssessment ? (
+                <>
+                  <div className="mb-2 text-center">
+                    <p className="text-sm font-semibold text-slate-900">PQC readiness</p>
+                    <p className="mt-1 text-xs text-slate-500">Tier {pqcAssessment.tier} · {pqcAssessment.status}</p>
+                  </div>
+                  <PqcGauge score={pqcAssessment.score} />
+                  <button type="button" onClick={() => setActiveTab("pqc")} className="mt-3 text-xs font-semibold text-[#8B0000] hover:underline">
+                    View scoring details
+                  </button>
+                </>
+              ) : (
+                <p className="text-sm font-medium text-slate-500">PQC scoring is unavailable for this port.</p>
+              )}
+            </div>
+            <div className="rounded-xl border border-[#8a5d33]/25 bg-white/30 px-4">
+              <div className="grid grid-cols-1 gap-x-8 md:grid-cols-2">
             <MetricCard
               label="Certificate Validity"
               value={
@@ -980,9 +975,16 @@ export default function AssetIntelligenceClient({
               icon={summary.noTlsDetected || summary.tlsVersionSecure === false ? AlertTriangle : CheckCircle2}
               toneClass={summary.noTlsDetected || summary.tlsVersionSecure === false ? "text-red-500" : summary.tlsVersionSecure === true ? "text-emerald-500" : "text-[#8a5d33]/55"}
             />
+              </div>
+              <div className="grid grid-cols-1 gap-x-8 border-t border-[#8a5d33]/15 md:grid-cols-2">
+                <DetailRow label="Supported TLS versions" value={summary.supportedTlsVersions.join(", ") || "None"} />
+                <DetailRow label="Scanned at" value={formatScanTimestamp(payload.scanned_at)} />
+              </div>
+            </div>
           </div>
+          )}
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          {activeTab === "certificate" && (
             <SectionCard
               title="Certificate & Identity"
               icon={Globe}
@@ -1137,7 +1139,9 @@ export default function AssetIntelligenceClient({
                 </div>
               )}
             </SectionCard>
+          )}
 
+          {activeTab === "overview" && (
             <SectionCard title="Negotiation Highlights" icon={Activity}>
               <div className="divide-y divide-amber-500/10">
                 <DetailRow label="Negotiated Cipher" value={summary.noTlsDetected ? "Not negotiated" : summary.negotiatedCipher || "Unknown"} />
@@ -1150,10 +1154,11 @@ export default function AssetIntelligenceClient({
                 <DetailRow label="Scanned At" value={formatScanTimestamp(payload.scanned_at)} />
               </div>
             </SectionCard>
-          </div>
+          )}
 
-          {supportedProbes.length > 0 && (
-            <SectionCard title="Per-Version OpenSSL Probes" icon={Server}>
+          {activeTab === "tls" && (
+            supportedProbes.length > 0 ? (
+            <SectionCard title="TLS versions for this port" icon={Server}>
               <div className="space-y-4">
                 {featuredProbe && (
                   <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -1317,9 +1322,63 @@ export default function AssetIntelligenceClient({
                 )}
               </div>
             </SectionCard>
+            ) : (
+              <div className="rounded-xl border border-dashed border-[#8a5d33]/35 bg-white/20 px-5 py-12 text-center text-sm font-medium text-slate-600">
+                No supported TLS versions were reported for {selectedPortTab.label}.
+              </div>
+            )
           )}
 
-          {summary.warnings.length > 0 && (
+          {activeTab === "algorithms" && (
+            <SectionCard title="Cryptographic algorithms" icon={KeyRound}>
+              <div className="divide-y divide-[#8a5d33]/15">
+                <div className="grid gap-4 py-4 first:pt-0 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Cipher preference order</p>
+                    <p className="mt-1 text-xs text-slate-500">Server-supported cipher order for this port.</p>
+                  </div>
+                  <ScrollValueTable values={summary.cipherPreferenceOrder} emptyLabel="No cipher preference order reported." highlightValue={isPreferredTlsCipher} />
+                </div>
+                <div className="grid gap-4 py-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Key exchange</p>
+                    <p className="mt-1 text-xs text-slate-500">Observed key establishment algorithms.</p>
+                  </div>
+                  <ChipList values={summary.keyExchangeAlgorithms} emptyLabel="No key exchange algorithms reported." />
+                </div>
+                <div className="grid gap-4 py-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Encryption</p>
+                    <p className="mt-1 text-xs text-slate-500">Symmetric encryption algorithms in the scan evidence.</p>
+                  </div>
+                  <ChipList values={summary.encryptionAlgorithms} emptyLabel="No encryption algorithms reported." />
+                </div>
+                <div className="grid gap-4 py-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Signatures</p>
+                    <p className="mt-1 text-xs text-slate-500">Authentication and certificate signature algorithms.</p>
+                  </div>
+                  <ChipList values={summary.signatureAlgorithms} emptyLabel="No signature algorithms reported." />
+                </div>
+                <div className="grid gap-4 py-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Supported groups</p>
+                    <p className="mt-1 text-xs text-slate-500">Elliptic-curve and hybrid KEM groups.</p>
+                  </div>
+                  <ChipList values={summary.supportedGroups} emptyLabel="No supported groups reported." />
+                </div>
+                <div className="grid gap-4 py-4 last:pb-0 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Queried groups</p>
+                    <p className="mt-1 text-xs text-slate-500">Groups offered during capability probing.</p>
+                  </div>
+                  <ChipList values={summary.queriedGroups} emptyLabel="No queried groups reported." />
+                </div>
+              </div>
+            </SectionCard>
+          )}
+
+          {activeTab === "overview" && summary.warnings.length > 0 && (
             <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5">
               <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-amber-800/60">Analysis Warnings</p>
               <div className="space-y-2">
@@ -1333,7 +1392,7 @@ export default function AssetIntelligenceClient({
             </div>
           )}
 
-          {summary.dnsMissing && (
+          {activeTab === "overview" && summary.dnsMissing && (
             <div className="rounded-3xl border border-red-200 bg-red-50 p-5">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
@@ -1347,7 +1406,7 @@ export default function AssetIntelligenceClient({
             </div>
           )}
 
-          {pqcAssessment && (
+          {activeTab === "pqc" && pqcAssessment && (
             <SectionCard 
               title="Post-Quantum Cryptography (PQC) Insights" 
               icon={ShieldCheck}
@@ -1510,6 +1569,8 @@ export default function AssetIntelligenceClient({
 
         </div>
       )}
+      </div>
+      </section>
     </div>
   );
 }
