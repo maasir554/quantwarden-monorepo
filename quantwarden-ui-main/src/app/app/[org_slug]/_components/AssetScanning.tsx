@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import ReactDOM from "react-dom";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { parseOpenSSLScanResult } from "@/lib/openssl-scan";
+import { calculatePqcScore } from "@/lib/pqc-scoring";
 import { useScanActivity } from "@/components/scan-activity-provider";
 
 interface AssetScanningProps {
@@ -510,7 +511,7 @@ export default function AssetScanning({ org, isAdmin, canScan }: AssetScanningPr
     });
   }, [filteredAssetIdKey, filteredAssets]);
 
-  const renderScanDetails = (scan: ScanData) => {
+  const renderScanDetails = (scan: ScanData, asset?: ScandAsset) => {
     if (scan.status === "pending" || scan.status === "running") {
       return (
         <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 flex items-center gap-3">
@@ -558,66 +559,97 @@ export default function AssetScanning({ org, isAdmin, canScan }: AssetScanningPr
 
     const payload = parsed.raw;
     const summary = parsed.summary;
-    const sans = payload.certificate.san_dns || [];
     const noTlsDetected = summary.noTlsDetected;
     const noTlsHint =
       noTlsDetected && payload.port === 80
         ? "Port 80 often indicates a plain HTTP service, and no TLS was detected here."
         : null;
-    const activeProbe =
-      payload.tls_versions.find(
-        (probe) => probe.supported && (probe.negotiated_protocol || probe.tls_version) === summary.primaryTlsVersion
-      ) ||
-      payload.tls_versions.find((probe) => probe.supported) ||
-      null;
+    const pqcAssessment = calculatePqcScore(payload);
+    const signatureName = summary.publicKeyAlgorithm && summary.publicKeyBits
+      ? `${summary.publicKeyAlgorithm}-${summary.publicKeyBits}`
+      : summary.signatureAlgorithm || "Not reported";
+    const signatureIsPqc = /ml-?dsa|dilithium|slh-?dsa|sphincs/i.test(signatureName);
+    const formatCryptoName = (value: string) => value
+      .replace(/X25519[_-]?MLKEM[_-]?768/gi, "X25519 + ML-KEM-768")
+      .replace(/MLKEM[_-]?768/gi, "ML-KEM-768")
+      .replace(/_/g, "-");
+    const cipherNames = Array.from(new Set(
+      (summary.encryptionAlgorithms.length > 0
+        ? summary.encryptionAlgorithms
+        : [summary.preferredCipher]
+      ).filter((value): value is string => Boolean(value))
+    )).map(formatCryptoName);
+    const keyExchangeNames = Array.from(new Set(
+      [summary.negotiatedGroup, ...summary.keyExchangeAlgorithms]
+        .filter((value): value is string => Boolean(value))
+        .map(formatCryptoName)
+    ));
+    const hasMlKem = keyExchangeNames.some((value) => /ML-KEM/i.test(value));
+    const negotiatedMlKem = Boolean(summary.negotiatedGroup && /MLKEM|ML-KEM/i.test(summary.negotiatedGroup));
+    const openPorts = asset?.currentTcpPorts?.length
+      ? asset.currentTcpPorts
+      : [{ number: payload.port, protocol: "tcp" as const, key: `${payload.port}/tcp`, label: `${payload.port}/TCP` }];
+    const portService = (port: number) => ({
+      22: "SSH",
+      25: "SMTP",
+      53: "DNS",
+      80: "HTTP",
+      110: "POP3",
+      143: "IMAP",
+      443: "HTTPS",
+      465: "SMTPS",
+      587: "SMTP",
+      993: "IMAPS",
+      995: "POP3S",
+      3306: "MySQL",
+      5432: "PostgreSQL",
+      8080: "HTTP",
+    } as Record<number, string>)[port] || "TCP";
 
-    const certificateValidityValue = summary.dnsMissing
-      ? "Unavailable"
-      : noTlsDetected
-        ? "No certificate detected"
-        : summary.certificateValid === false
-          ? "Invalid"
-          : summary.certificateValid === true
-            ? "Valid"
-            : "Unknown";
-    const certificateValidityIcon = summary.dnsMissing || noTlsDetected || summary.certificateValid === false ? AlertTriangle : CheckCircle2;
-    const certificateValidityColor = summary.dnsMissing || noTlsDetected || summary.certificateValid === false ? "text-red-500" : "text-emerald-500";
-    const tlsProtocolValue = noTlsDetected ? "No TLS negotiated" : summary.primaryTlsVersion || "Unknown";
-    const preferredCipherValue = noTlsDetected ? "Not negotiated" : summary.preferredCipher || "Unknown";
-    const preferredCipherColor = noTlsDetected || summary.strongCipher === false ? "text-red-500" : "text-emerald-500";
-    const publicKeyValue = noTlsDetected
-      ? "Not applicable"
-      : summary.publicKeyAlgorithm && summary.publicKeyBits
-        ? `${summary.publicKeyAlgorithm} (${summary.publicKeyBits} bits)`
-        : "Unknown";
-    const publicKeyIcon = noTlsDetected || summary.keySizeAdequate === false ? AlertTriangle : CheckCircle2;
-    const publicKeyColor = noTlsDetected || summary.keySizeAdequate === false ? "text-red-500" : "text-emerald-500";
-    const strongCipherValue = noTlsDetected ? "Not applicable" : summary.strongCipher === true ? "Yes" : summary.strongCipher === false ? "No" : "Unknown";
-    const strongCipherIcon = noTlsDetected || summary.strongCipher === false ? AlertTriangle : CheckCircle2;
-    const strongCipherColor = noTlsDetected || summary.strongCipher === false ? "text-red-500" : summary.strongCipher === true ? "text-emerald-500" : "text-[#8a5d33]/55";
-    const downgradeValue = noTlsDetected ? "Not applicable" : summary.tlsVersionSecure === true ? "Yes" : summary.tlsVersionSecure === false ? "Weak TLS allowed" : "Unknown";
-    const downgradeIcon = noTlsDetected || summary.tlsVersionSecure === false ? AlertTriangle : CheckCircle2;
-    const downgradeColor = noTlsDetected || summary.tlsVersionSecure === false ? "text-red-500" : summary.tlsVersionSecure === true ? "text-emerald-500" : "text-[#8a5d33]/55";
-
-    const Item = ({ label, icon: Icon, value, colorClass, title, children }: any) => (
-      <div className="space-y-2">
-        <p className="text-[10px] font-bold text-[#8a5d33]/50 uppercase tracking-widest">{label}</p>
-        <div className="flex items-center gap-2 group relative">
-          <Icon className={`w-5 h-5 ${colorClass}`} />
-          <div className="text-sm font-bold text-[#3d200a] truncate flex-1" title={title}>
-            {value}
-            {children}
-          </div>
-        </div>
-      </div>
+    const SummarySection = ({ title, icon: Icon, children }: { title: string; icon: typeof ShieldCheck; children: ReactNode }) => (
+      <section className="min-w-0 border-b border-[#8B0000]/16 bg-white/62 last:border-b-0 md:border-r md:[&:nth-child(3n)]:border-r-0 md:[&:nth-last-child(-n+3)]:border-b-0">
+        <header className="flex h-10 items-center gap-2 bg-[#8B0000] px-3 text-white">
+          <Icon className="h-4 w-4 shrink-0" />
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.16em]">{title}</h3>
+        </header>
+        <div className="min-h-28 space-y-2.5 px-3 py-3">{children}</div>
+      </section>
     );
 
-    const chipClass = "px-2.5 py-1 rounded-full bg-white border border-amber-200 text-[11px] font-bold text-[#3d200a]";
+    const Finding = ({
+      children,
+      tone = "safe",
+      badge,
+    }: {
+      children: ReactNode;
+      tone?: "safe" | "warning" | "neutral";
+      badge?: string;
+    }) => {
+      const Icon = tone === "warning" ? AlertTriangle : CheckCircle2;
+      const color = tone === "warning" ? "text-amber-600" : tone === "neutral" ? "text-slate-500" : "text-emerald-600";
+      return (
+        <div className={`flex min-w-0 items-start gap-2 text-sm font-semibold ${color}`}>
+          <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+          <span className="min-w-0 break-words text-[#3d200a]">{children}</span>
+          {badge ? (
+            <span className="shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700">
+              {badge}
+            </span>
+          ) : null}
+        </div>
+      );
+    };
+
+    const Guidance = ({ children, tone = "neutral" }: { children: ReactNode; tone?: "safe" | "warning" | "neutral" }) => (
+      <p className={`pl-6 text-[11px] font-medium leading-4 ${tone === "safe" ? "text-emerald-700" : tone === "warning" ? "text-amber-700" : "text-blue-700"}`}>
+        {children}
+      </p>
+    );
 
     return (
-      <div className="p-5 bg-white rounded-xl border border-[#8a5d33]/10 shadow-sm space-y-6">
+      <div className="overflow-hidden rounded-xl border border-[#8a5d33]/25 bg-white/60 shadow-sm">
         {noTlsDetected && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+          <div className="border-b border-red-200 bg-red-50 p-4">
             <div className="flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 shrink-0 text-red-500" />
               <div>
@@ -632,206 +664,72 @@ export default function AssetScanning({ org, isAdmin, canScan }: AssetScanningPr
             </div>
           </div>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Item
-            label="Certificate Validity"
-            icon={certificateValidityIcon}
-            colorClass={certificateValidityColor}
-            value={certificateValidityValue}
-          />
-          <Item
-            label="TLS Protocol"
-            icon={Lock}
-            colorClass={noTlsDetected ? "text-red-500" : "text-blue-500"}
-            value={tlsProtocolValue}
-          />
-          <Item
-            label="Expiry"
-            icon={summary.dnsMissing || noTlsDetected ? AlertTriangle : Calendar}
-            colorClass={summary.dnsMissing || noTlsDetected ? "text-red-500" : summary.daysRemaining !== null && summary.daysRemaining > 30 ? "text-emerald-500" : "text-amber-500"}
-            value={summary.dnsMissing ? "DNS Expired" : noTlsDetected ? "Not applicable" : summary.daysRemaining !== null ? `${summary.daysRemaining} days` : "Unknown"}
-          />
-          <Item
-            label="Preferred Cipher"
-            icon={ShieldCheck}
-            colorClass={preferredCipherColor}
-            title={summary.preferredCipher || undefined}
-            value={preferredCipherValue}
-          />
-        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3">
+          <SummarySection title="Signature" icon={Fingerprint}>
+            <Finding tone={signatureIsPqc ? "safe" : "warning"}>{noTlsDetected ? "Not available" : signatureName}</Finding>
+            {!noTlsDetected ? (
+              signatureIsPqc
+                ? <Guidance tone="safe">Post-quantum signature detected.</Guidance>
+                : <Guidance tone="warning">Classical signatures remain vulnerable to quantum attacks.</Guidance>
+            ) : null}
+            {!signatureIsPqc && !noTlsDetected ? <Guidance>Plan migration to ML-DSA.</Guidance> : null}
+          </SummarySection>
 
-        <div className="h-px w-full bg-[#8a5d33]/5"></div>
+          <SummarySection title="Cipher" icon={ShieldCheck}>
+            {cipherNames.length > 0 ? cipherNames.slice(0, 3).map((cipher) => {
+              const transitional = /AES-?128/i.test(cipher);
+              const weak = /DES|RC4|NULL|EXPORT|MD5/i.test(cipher);
+              return <Finding key={cipher} tone={weak || transitional ? "warning" : "safe"}>{cipher}</Finding>;
+            }) : <Finding tone="neutral">Not reported</Finding>}
+            {cipherNames.length > 3 ? <Guidance>{cipherNames.length - 3} additional ciphers are available in Details.</Guidance> : null}
+            {cipherNames.some((cipher) => /AES-?128/i.test(cipher)) ? <Guidance tone="warning">AES-128 provides reduced post-quantum strength.</Guidance> : null}
+          </SummarySection>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Item
-            label="Subject (Common Name)"
-            icon={Globe}
-            colorClass={noTlsDetected ? "text-red-500" : "text-indigo-500"}
-            title={summary.subjectCommonName || undefined}
-            value={noTlsDetected ? "No certificate detected" : summary.subjectCommonName || "Unknown"}
-          />
-          <Item
-            label="Issuer Authority"
-            icon={Server}
-            colorClass={noTlsDetected ? "text-red-500" : "text-indigo-500"}
-            title={summary.issuerCommonName || undefined}
-            value={noTlsDetected ? "Not reported" : summary.issuerCommonName || "Unknown"}
-          />
-          <Item
-            label="Subject Alt Names"
-            icon={Globe}
-            colorClass="text-blue-500"
-            value={`${sans.length} domains`}
-          >
-            {sans.length > 0 && (
-              <div className="absolute z-50 top-full left-0 mt-2 hidden group-hover:block w-72 bg-[#3d200a] text-white text-xs p-3 rounded-xl shadow-xl max-h-48 overflow-y-auto ring-1 ring-white/10 break-all leading-tight">
-                {sans.map((s: string) => <div key={s} className="py-0.5 opacity-90">{s}</div>)}
-              </div>
-            )}
-          </Item>
-          <Item
-            label="Negotiated Group"
-            icon={Lock}
-            colorClass={noTlsDetected ? "text-red-500" : "text-indigo-500"}
-            value={noTlsDetected ? "Not applicable" : summary.negotiatedGroup || "Not reported"}
-          />
-        </div>
+          <SummarySection title="Key Exchange" icon={Lock}>
+            {keyExchangeNames.length > 0 ? keyExchangeNames.slice(0, 3).map((exchange) => (
+              <Finding key={exchange} tone={/ML-KEM/i.test(exchange) ? "safe" : "neutral"} badge={negotiatedMlKem && /ML-KEM/i.test(exchange) ? "Negotiated" : undefined}>
+                {exchange}
+              </Finding>
+            )) : <Finding tone="neutral">Not reported</Finding>}
+            {hasMlKem
+              ? <Guidance tone="safe">Post-quantum key exchange is available.</Guidance>
+              : <Guidance tone="warning">Classical exchange only; migrate to ML-KEM.</Guidance>}
+          </SummarySection>
 
-        <div className="h-px w-full bg-[#8a5d33]/5"></div>
+          <SummarySection title="Protocol" icon={Lock}>
+            {summary.supportedTlsVersions.length > 0 ? summary.supportedTlsVersions.slice(0, 3).map((version) => (
+              <Finding key={version} tone={version === "TLSv1.3" ? "safe" : version === "TLSv1.2" ? "neutral" : "warning"}>
+                {version.replace("TLSv", "TLS ")}
+              </Finding>
+            )) : <Finding tone="warning">No TLS negotiated</Finding>}
+            {summary.tlsVersionSecure === true ? <Guidance tone="safe">Legacy TLS versions are disabled.</Guidance> : null}
+            {summary.tlsVersionSecure === false ? <Guidance tone="warning">TLS 1.0 or 1.1 remains enabled.</Guidance> : null}
+          </SummarySection>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Item
-            label="Public Key Size"
-            icon={publicKeyIcon}
-            colorClass={publicKeyColor}
-            value={publicKeyValue}
-          />
-          <Item
-            label="Signature Algorithm"
-            icon={Zap}
-            colorClass={noTlsDetected ? "text-red-500" : "text-blue-500"}
-            value={noTlsDetected ? "Not applicable" : summary.signatureAlgorithm || "Unknown"}
-          />
-          <Item
-            label="Strong Cipher"
-            icon={strongCipherIcon}
-            colorClass={strongCipherColor}
-            value={strongCipherValue}
-          />
-          <Item
-            label="TLS Downgrade Safe"
-            icon={downgradeIcon}
-            colorClass={downgradeColor}
-            value={downgradeValue}
-          />
-        </div>
+          <SummarySection title="Open Ports" icon={Server}>
+            {openPorts.slice(0, 4).map((port) => (
+              <Finding key={port.key} tone="safe">
+                {port.number}/TCP <span className="font-medium text-slate-500">({portService(port.number)})</span>
+              </Finding>
+            ))}
+            {openPorts.length > 4 ? <Guidance>{openPorts.length - 4} additional open ports are available in Details.</Guidance> : null}
+          </SummarySection>
 
-        <div className="h-px w-full bg-[#8a5d33]/5"></div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <div className="rounded-2xl border border-amber-200/70 bg-[#fdf8f0]/70 p-4 space-y-3">
-            <p className="text-[10px] font-bold text-[#8a5d33]/60 uppercase tracking-widest">Supported TLS Versions</p>
-            <div className="flex flex-wrap gap-2">
-              {summary.supportedTlsVersions.length > 0 ? (
-                summary.supportedTlsVersions.map((version) => (
-                  <span key={version} className={chipClass}>{version}</span>
-                ))
-              ) : (
-                <span className="text-sm font-semibold text-[#8a5d33]/60">No supported versions reported</span>
-              )}
-            </div>
-            <p className="text-[10px] font-bold text-[#8a5d33]/60 uppercase tracking-widest pt-2">Active Version Cipher Order</p>
-            <div className="space-y-2">
-              {activeProbe?.accepted_ciphers_in_client_offer_order?.length ? (
-                activeProbe.accepted_ciphers_in_client_offer_order.slice(0, 6).map((cipher, index) => (
-                  <div key={cipher} className="flex items-center gap-3 text-sm font-semibold text-[#3d200a]">
-                    <span className="w-6 h-6 rounded-full bg-white border border-amber-200 flex items-center justify-center text-[11px] font-extrabold text-[#8B0000]">{index + 1}</span>
-                    <span className="break-all">{cipher}</span>
-                  </div>
-                ))
-              ) : (
-                <span className="text-sm font-semibold text-[#8a5d33]/60">No per-version cipher order reported</span>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-amber-200/70 bg-[#fdf8f0]/70 p-4 space-y-3">
-            <p className="text-[10px] font-bold text-[#8a5d33]/60 uppercase tracking-widest">Key Exchange & Groups</p>
-            <div className="flex flex-wrap gap-2">
-              {summary.keyExchangeAlgorithms.length > 0 ? (
-                summary.keyExchangeAlgorithms.map((algorithm) => (
-                  <span key={algorithm} className={chipClass}>{algorithm}</span>
-                ))
-              ) : (
-                <span className="text-sm font-semibold text-[#8a5d33]/60">No key exchange algorithms reported</span>
-              )}
-            </div>
-            <p className="text-[10px] font-bold text-[#8a5d33]/60 uppercase tracking-widest pt-2">Queried Groups</p>
-            <div className="flex flex-wrap gap-2">
-              {summary.queriedGroups.length > 0 ? (
-                summary.queriedGroups.map((group) => (
-                  <span key={group} className={chipClass}>{group}</span>
-                ))
-              ) : (
-                <span className="text-sm font-semibold text-[#8a5d33]/60">No queried groups reported</span>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-amber-200/70 bg-[#fdf8f0]/70 p-4 space-y-3">
-            <p className="text-[10px] font-bold text-[#8a5d33]/60 uppercase tracking-widest">Supported Groups</p>
-            <div className="flex flex-wrap gap-2">
-              {summary.supportedGroups.length > 0 ? (
-                summary.supportedGroups.map((group) => (
-                  <span key={group} className={chipClass}>{group}</span>
-                ))
-              ) : (
-                <span className="text-sm font-semibold text-[#8a5d33]/60">No supported groups reported</span>
-              )}
-            </div>
-            <p className="text-[10px] font-bold text-[#8a5d33]/60 uppercase tracking-widest pt-2">Global Cipher Preference</p>
-            <div className="space-y-2">
-              {summary.cipherPreferenceOrder.length > 0 ? (
-                summary.cipherPreferenceOrder.slice(0, 8).map((cipher, index) => (
-                  <div key={cipher} className="flex items-center gap-3 text-sm font-semibold text-[#3d200a]">
-                    <span className="w-6 h-6 rounded-full bg-white border border-amber-200 flex items-center justify-center text-[11px] font-extrabold text-[#8B0000]">{index + 1}</span>
-                    <span className="break-all">{cipher}</span>
-                  </div>
-                ))
-              ) : (
-                <span className="text-sm font-semibold text-[#8a5d33]/60">No cipher preference data reported</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {summary.warnings.length > 0 && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-            <p className="text-[10px] font-bold text-amber-800/60 uppercase tracking-widest mb-3">Analysis Warnings</p>
-            <div className="space-y-2">
-              {summary.warnings.map((warning) => (
-                <div key={warning} className="flex items-start gap-2 text-sm font-semibold text-amber-800">
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{warning}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {summary.dnsMissing && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 shrink-0 text-red-500" />
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-red-700/70">DNS Expired</p>
-                <p className="mt-1 text-sm font-semibold text-red-700">
-                  The domain no longer resolves in DNS. This is different from an OpenSSL request failure.
+          <SummarySection title="PQC Score" icon={ShieldCheck}>
+            {pqcAssessment ? (
+              <>
+                <p className="pl-1 text-3xl font-bold leading-none text-[#3d200a]">
+                  {pqcAssessment.score}<span className="text-base font-semibold text-slate-500">/100</span>
                 </p>
-              </div>
-            </div>
-          </div>
-        )}
+                <Guidance tone={pqcAssessment.tier === "A" ? "safe" : pqcAssessment.tier === "D" ? "warning" : "neutral"}>
+                  Tier {pqcAssessment.tier} · {pqcAssessment.status}
+                </Guidance>
+              </>
+            ) : (
+              <Finding tone="neutral">Not available</Finding>
+            )}
+          </SummarySection>
+        </div>
       </div>
     );
   };
@@ -915,22 +813,18 @@ export default function AssetScanning({ org, isAdmin, canScan }: AssetScanningPr
     }
 
     if (effectiveState === "noTls") {
-      return (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+      return portTab.latestScan
+        ? renderScanDetails(portTab.latestScan, asset)
+        : (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 shrink-0 text-red-500" />
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-red-700/70">No TLS Detected</p>
-                <p className="mt-1 text-sm font-semibold text-red-700">
-                  OpenSSL reached port {portTab.number}/TCP, but no TLS session or certificate was reported.
-                </p>
-              </div>
+              <AlertTriangle className="h-5 w-5 shrink-0 text-red-500" />
+              <p className="text-sm font-semibold text-red-700">
+                OpenSSL reached port {portTab.number}/TCP, but no TLS session or certificate was reported.
+              </p>
             </div>
           </div>
-          {portTab.latestScan ? renderScanDetails(portTab.latestScan) : null}
-        </div>
-      );
+        );
     }
 
     if (!portTab.latestScan) {
@@ -943,7 +837,7 @@ export default function AssetScanning({ org, isAdmin, canScan }: AssetScanningPr
       );
     }
 
-    return renderScanDetails(portTab.latestScan);
+    return renderScanDetails(portTab.latestScan, asset);
   };
 
   return (
@@ -1251,12 +1145,6 @@ export default function AssetScanning({ org, isAdmin, canScan }: AssetScanningPr
                             );
                           })}
                         </div>
-
-                        {selectedPortTab && (
-                          <div className="rounded-xl border border-amber-200/70 bg-white/60 px-4 py-3 text-xs font-semibold text-[#8a5d33]/75">
-                            Showing OpenSSL summary for <span className="font-black text-[#3d200a]">{selectedPortTab.label}</span>.
-                          </div>
-                        )}
 
                         {renderPortTabContent(asset, selectedPortTab)}
                       </div>
