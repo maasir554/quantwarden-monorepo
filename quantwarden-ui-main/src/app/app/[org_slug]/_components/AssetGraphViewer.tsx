@@ -3,6 +3,16 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Network, Plus, RotateCcw } from "lucide-react";
+import {
+  forceCenter,
+  forceCollide,
+  forceLink,
+  forceManyBody,
+  forceRadial,
+  forceSimulation,
+  type SimulationLinkDatum,
+  type SimulationNodeDatum,
+} from "d3-force";
 import { normalizeAssetOpenPorts } from "@/lib/port-discovery";
 
 type AssetGraphViewerProps = {
@@ -30,7 +40,7 @@ type AssetRow = {
 
 type GraphNodeKind = "domain" | "ip" | "service" | "scanner";
 
-type GraphNode = {
+type GraphNode = SimulationNodeDatum & {
   id: string;
   kind: GraphNodeKind;
   label: string;
@@ -43,12 +53,17 @@ type GraphNode = {
   labelDy?: number;
   labelAnchor?: "start" | "middle" | "end";
   alwaysLabel?: boolean;
+  layer: 0 | 1 | 2 | 3;
 };
 
 type GraphEdge = {
   id: string;
   source: string;
   target: string;
+};
+
+type ForceLink = SimulationLinkDatum<GraphNode> & {
+  id: string;
 };
 
 type PositionedAsset = {
@@ -73,8 +88,8 @@ type LabelPlacement = {
 
 type ScreenBox = { left: number; top: number; right: number; bottom: number };
 
-const graphWidth = 1600;
-const graphHeight = 1100;
+const graphWidth = 1800;
+const graphHeight = 1400;
 const centerX = graphWidth / 2;
 const centerY = graphHeight / 2;
 const minZoom = 0.32;
@@ -82,14 +97,23 @@ const maxZoom = 3.2;
 const graphPadding = 28;
 
 const nodeStyles: Record<GraphNodeKind, { fill: string; stroke: string; text: string }> = {
-  domain: { fill: "#2563eb", stroke: "#1d4ed8", text: "#1e3a8a" },
-  ip: { fill: "#7c3aed", stroke: "#6d28d9", text: "#4c1d95" },
-  service: { fill: "#059669", stroke: "#047857", text: "#065f46" },
-  scanner: { fill: "#991b1b", stroke: "#7f1d1d", text: "#7f1d1d" },
+  domain: { fill: "#315f8c", stroke: "#173f66", text: "#173a5e" },
+  ip: { fill: "#76508c", stroke: "#513464", text: "#432751" },
+  service: { fill: "#2b7a6c", stroke: "#17584f", text: "#174f48" },
+  scanner: { fill: "#982c38", stroke: "#681c24", text: "#681c24" },
 };
 
 function truncateLabel(value: string, maxLength = 24) {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
+}
+
+function edgeColor(source: GraphNode, target: GraphNode, active: boolean) {
+  if (active) return "#7f1d2d";
+  const peripheralKind = target.kind === "scanner" ? source.kind : target.kind;
+  if (peripheralKind === "service") return "#6f9991";
+  if (peripheralKind === "ip") return "#9480a0";
+  if (source.kind === "scanner" || target.kind === "scanner") return "#7890a6";
+  return "#6f879d";
 }
 
 function clampZoom(value: number) {
@@ -143,74 +167,91 @@ function layoutAssetNodes(assets: AssetRow[]) {
   ];
 }
 
-function stableDirection(leftId: string, rightId: string) {
-  const value = `${leftId}:${rightId}`;
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  }
-  const angle = (hash % 360) * (Math.PI / 180);
-  return { x: Math.cos(angle), y: Math.sin(angle) };
+function seededRandom() {
+  let state = 0x6d2b79f5;
+  return () => {
+    state = Math.imul(state ^ (state >>> 15), state | 1);
+    state ^= state + Math.imul(state ^ (state >>> 7), state | 61);
+    return ((state ^ (state >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-function collisionDistance(left: GraphNode, right: GraphNode) {
-  if (left.kind === "scanner" || right.kind === "scanner") return 132;
-  if (left.kind === "domain" && right.kind === "domain") return 100;
-  if (left.kind === "domain" || right.kind === "domain") return 84;
-  return 68;
+function collisionRadius(node: GraphNode) {
+  if (node.kind === "scanner") return 58;
+  if (node.kind === "domain") return node.alwaysLabel ? 46 : 39;
+  if (node.kind === "ip") return 34;
+  return 27;
 }
 
-function applyNodeRepulsion(sourceNodes: GraphNode[]) {
+function linkEndpointKind(endpoint: string | number | GraphNode) {
+  return typeof endpoint === "object" ? endpoint.kind : null;
+}
+
+function linkDistance(link: ForceLink) {
+  const sourceKind = linkEndpointKind(link.source);
+  const targetKind = linkEndpointKind(link.target);
+  if (sourceKind === "scanner" || targetKind === "scanner") return 280;
+  if (sourceKind === "service" || targetKind === "service") return 105;
+  if (sourceKind === "ip" || targetKind === "ip") return 120;
+  return 165;
+}
+
+function applyForceLayout(sourceNodes: GraphNode[], sourceEdges: GraphEdge[]) {
   const nodes = sourceNodes.map((node) => ({ ...node }));
-  const origins = new Map(nodes.map((node) => [node.id, { x: node.x, y: node.y }]));
-
-  for (let iteration = 0; iteration < 120; iteration += 1) {
-    const cooling = 1 - iteration / 150;
-
-    for (let leftIndex = 0; leftIndex < nodes.length; leftIndex += 1) {
-      for (let rightIndex = leftIndex + 1; rightIndex < nodes.length; rightIndex += 1) {
-        const left = nodes[leftIndex];
-        const right = nodes[rightIndex];
-        let dx = right.x - left.x;
-        let dy = right.y - left.y;
-        let distance = Math.hypot(dx, dy);
-        const requiredDistance = collisionDistance(left, right);
-        if (distance >= requiredDistance) continue;
-
-        if (distance < 0.001) {
-          const direction = stableDirection(left.id, right.id);
-          dx = direction.x;
-          dy = direction.y;
-          distance = 1;
-        }
-
-        const push = ((requiredDistance - distance) * 0.48 * cooling) / distance;
-        const pushX = dx * push;
-        const pushY = dy * push;
-        const leftFixed = left.kind === "scanner";
-        const rightFixed = right.kind === "scanner";
-
-        if (!leftFixed) {
-          left.x -= pushX * (rightFixed ? 1 : 0.5);
-          left.y -= pushY * (rightFixed ? 1 : 0.5);
-        }
-        if (!rightFixed) {
-          right.x += pushX * (leftFixed ? 1 : 0.5);
-          right.y += pushY * (leftFixed ? 1 : 0.5);
-        }
-      }
-    }
-
-    nodes.forEach((node) => {
-      if (node.kind === "scanner") return;
-      const origin = origins.get(node.id);
-      if (!origin) return;
-      node.x += (origin.x - node.x) * 0.018;
-      node.y += (origin.y - node.y) * 0.018;
-      node.x = Math.min(graphWidth - 45, Math.max(45, node.x));
-      node.y = Math.min(graphHeight - 45, Math.max(45, node.y));
-    });
+  const links: ForceLink[] = sourceEdges.map((edge) => ({ ...edge }));
+  const scanner = nodes.find((node) => node.kind === "scanner");
+  if (scanner) {
+    scanner.fx = centerX;
+    scanner.fy = centerY;
   }
+
+  const simulation = forceSimulation<GraphNode>(nodes)
+    .randomSource(seededRandom())
+    .alpha(1)
+    .alphaDecay(0.022)
+    .velocityDecay(0.38)
+    .force(
+      "link",
+      forceLink<GraphNode, ForceLink>(links)
+        .id((node) => node.id)
+        .distance(linkDistance)
+        .strength((link) => {
+          const sourceKind = linkEndpointKind(link.source);
+          const targetKind = linkEndpointKind(link.target);
+          return sourceKind === "scanner" || targetKind === "scanner" ? 0.055 : 0.32;
+        })
+        .iterations(2)
+    )
+    .force(
+      "charge",
+      forceManyBody<GraphNode>()
+        .strength((node) =>
+          node.kind === "scanner" ? -1100 : node.kind === "domain" ? -260 : node.kind === "ip" ? -180 : -120
+        )
+        .distanceMin(24)
+        .distanceMax(720)
+        .theta(0.88)
+    )
+    .force(
+      "collision",
+      forceCollide<GraphNode>()
+        .radius(collisionRadius)
+        .strength(1)
+        .iterations(3)
+    )
+    .force(
+      "radial",
+      forceRadial<GraphNode>(
+        (node) => (node.layer === 0 ? 0 : node.layer === 1 ? 260 : node.layer === 2 ? 470 : 610),
+        centerX,
+        centerY
+      ).strength((node) => (node.layer === 0 ? 1 : 0.045))
+    )
+    .force("center", forceCenter<GraphNode>(centerX, centerY).strength(0.7))
+    .stop();
+
+  for (let tick = 0; tick < 320; tick += 1) simulation.tick();
+  simulation.stop();
 
   return nodes;
 }
@@ -230,11 +271,13 @@ function buildGraph(assets: AssetRow[]) {
     y: centerY,
     radius: 18,
     alwaysLabel: true,
+    layer: 0,
   });
 
   for (const { asset, x, y, angle } of layoutAssetNodes(assets)) {
     const assetNodeId = `asset:${asset.id}`;
     const assetKind: GraphNodeKind = asset.type === "ip" ? "ip" : "domain";
+    const parentVisible = Boolean(asset.parentId && visibleAssetIds.has(asset.parentId));
     const radialX = Math.cos(angle);
     const radialY = Math.sin(angle);
     const tangentX = -Math.sin(angle);
@@ -253,9 +296,9 @@ function buildGraph(assets: AssetRow[]) {
       labelDy: radialY * 40 + (Math.abs(radialY) < 0.3 ? 5 : 0),
       labelAnchor: radialX > 0.24 ? "start" : radialX < -0.24 ? "end" : "middle",
       alwaysLabel: Boolean(asset.isRoot),
+      layer: parentVisible ? 2 : 1,
     });
 
-    const parentVisible = asset.parentId && visibleAssetIds.has(asset.parentId);
     const source = parentVisible ? `asset:${asset.parentId}` : "scanner";
     edges.set(`${source}->${assetNodeId}`, { id: `${source}->${assetNodeId}`, source, target: assetNodeId });
 
@@ -273,6 +316,7 @@ function buildGraph(assets: AssetRow[]) {
           labelDx: radialX * 35,
           labelDy: radialY * 35,
           labelAnchor: radialX > 0.24 ? "start" : radialX < -0.24 ? "end" : "middle",
+          layer: 3,
         });
       }
       edges.set(`${assetNodeId}->${ipNodeId}`, { id: `${assetNodeId}->${ipNodeId}`, source: assetNodeId, target: ipNodeId });
@@ -294,12 +338,14 @@ function buildGraph(assets: AssetRow[]) {
         labelDx: radialX * 30,
         labelDy: radialY * 30,
         labelAnchor: radialX > 0.24 ? "start" : radialX < -0.24 ? "end" : "middle",
+        layer: 3,
       });
       edges.set(`${assetNodeId}->${portNodeId}`, { id: `${assetNodeId}->${portNodeId}`, source: assetNodeId, target: portNodeId });
     });
   }
 
-  return { nodes: applyNodeRepulsion([...nodes.values()]), edges: [...edges.values()] };
+  const graphEdges = [...edges.values()];
+  return { nodes: applyForceLayout([...nodes.values()], graphEdges), edges: graphEdges };
 }
 
 function boxesOverlap(left: ScreenBox, right: ScreenBox, gap = 5) {
@@ -596,7 +642,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
 
         <div
           ref={viewportRef}
-          className="relative min-h-0 flex-1 overflow-hidden bg-white/25"
+          className="relative min-h-0 flex-1 overflow-hidden bg-[#f4f1e8]/65"
           onMouseDown={(event) => {
             if (event.button !== 0) return;
             dragStateRef.current = {
@@ -664,7 +710,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                   setSelectedNodeId(null);
                 }}
               >
-                <rect width="100%" height="100%" fill="rgba(255,255,255,0.28)" />
+                <rect width="100%" height="100%" fill="rgba(250,248,242,0.72)" />
                 <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}>
                   {visibleEdges.map((edge) => {
                     const source = nodeById.get(edge.source);
@@ -678,9 +724,10 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                         y1={source.y}
                         x2={target.x}
                         y2={target.y}
-                        stroke={isActive ? "#64748b" : "#cbd5e1"}
-                        strokeWidth={isActive ? 2.5 : isHugeGraph ? 0.8 : 1.4}
-                        opacity={isHugeGraph ? 0.55 : 0.9}
+                        stroke={edgeColor(source, target, isActive)}
+                        strokeWidth={isActive ? 2.4 : isHugeGraph ? 1.05 : 1.25}
+                        opacity={isActive ? 0.98 : isHugeGraph ? 0.68 : 0.76}
+                        vectorEffect="non-scaling-stroke"
                       />
                     );
                   })}
