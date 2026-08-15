@@ -39,6 +39,7 @@ function SectionCard({
   icon: Icon,
   children,
   headerActions,
+  hideHeader = false,
   id,
 }: {
   title: string;
@@ -47,18 +48,24 @@ function SectionCard({
   scrollable?: boolean;
   maxHeightClass?: string;
   headerActions?: ReactNode;
+  hideHeader?: boolean;
   id?: string;
 }) {
   return (
     <section id={id} className="overflow-hidden rounded-xl border border-[#8a5d33]/25 bg-white/30">
-      <div className="flex items-center justify-between gap-3 border-b border-[#8a5d33]/20 bg-white/20 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-[#8B0000]" />
-          <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+      {!hideHeader && (
+        <div className="flex items-center justify-between gap-3 border-b border-[#8a5d33]/20 bg-white/20 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Icon className="h-4 w-4 text-[#8B0000]" />
+            <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+          </div>
+          {headerActions}
         </div>
-        {headerActions}
-      </div>
-      <div className="p-4 sm:p-5">{children}</div>
+      )}
+      {hideHeader && headerActions && (
+        <div className="flex justify-end px-4 pt-4 sm:px-5 sm:pt-5">{headerActions}</div>
+      )}
+      <div className={`p-4 sm:p-5 ${hideHeader && headerActions ? "pt-3 sm:pt-3" : ""}`}>{children}</div>
     </section>
   );
 }
@@ -993,6 +1000,7 @@ export default function AssetIntelligenceClient({
             <SectionCard
               title="Certificate & Identity"
               icon={Globe}
+              hideHeader
               scrollable
               maxHeightClass="h-[28rem]"
               headerActions={
@@ -1158,7 +1166,7 @@ export default function AssetIntelligenceClient({
 
           {activeTab === "tls" && (
             supportedProbes.length > 0 ? (
-            <SectionCard title="TLS versions for this port" icon={Server}>
+            <SectionCard title="TLS versions for this port" icon={Server} hideHeader>
               <div className="space-y-4">
                 <div className="grid gap-4 xl:grid-cols-2">
                   {supportedProbes.map((probe) => (
@@ -1225,7 +1233,7 @@ export default function AssetIntelligenceClient({
           )}
 
           {activeTab === "algorithms" && (
-            <SectionCard title="Cryptographic algorithms" icon={KeyRound}>
+            <SectionCard title="Cryptographic algorithms" icon={KeyRound} hideHeader>
               <div className="grid min-w-0 gap-4 lg:grid-cols-2">
                 <article className="min-w-0 rounded-xl border border-[#8a5d33]/20 bg-white/25 p-4 lg:col-span-2">
                   <div className="mb-3">
@@ -1316,6 +1324,7 @@ export default function AssetIntelligenceClient({
             <SectionCard 
               title="Post-Quantum Cryptography (PQC) Insights" 
               icon={ShieldCheck}
+              hideHeader
               id="pqc-insights"
               headerActions={
                 <button

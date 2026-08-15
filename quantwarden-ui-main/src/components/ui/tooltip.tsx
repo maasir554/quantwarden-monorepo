@@ -30,7 +30,7 @@ export function TooltipContent({
       <TooltipPrimitive.Content
         sideOffset={sideOffset}
         className={cn(
-          "z-[120] overflow-hidden rounded-full border border-slate-700/60 bg-slate-950 px-3 py-1.5 text-[10px] font-bold tracking-[0.02em] text-slate-100 shadow-xl animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+          "z-[1100] overflow-hidden rounded-full border border-slate-700/60 bg-slate-950 px-3 py-1.5 text-[10px] font-bold tracking-[0.02em] text-slate-100 shadow-xl animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           className
         )}
         {...props}
