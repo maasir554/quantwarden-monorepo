@@ -697,7 +697,7 @@ export default function AssetScanning({ org, isAdmin, canScan }: AssetScanningPr
           </SummarySection>
 
           <SummarySection title="Protocol" icon={Lock}>
-            {summary.supportedTlsVersions.length > 0 ? summary.supportedTlsVersions.slice(0, 3).map((version) => (
+            {summary.supportedTlsVersions.length > 0 ? summary.supportedTlsVersions.map((version) => (
               <Finding key={version} tone={version === "TLSv1.3" ? "safe" : version === "TLSv1.2" ? "neutral" : "warning"}>
                 {version.replace("TLSv", "TLS ")}
               </Finding>
