@@ -38,7 +38,7 @@ type AssetRow = {
   portDiscoveryStatus?: string | null;
 };
 
-type GraphNodeKind = "domain" | "ip" | "service" | "scanner";
+type GraphNodeKind = "root" | "domain" | "ip" | "service";
 
 type GraphNode = SimulationNodeDatum & {
   id: string;
@@ -54,6 +54,7 @@ type GraphNode = SimulationNodeDatum & {
   labelAnchor?: "start" | "middle" | "end";
   alwaysLabel?: boolean;
   layer: 0 | 1 | 2 | 3;
+  targetRadius: number;
 };
 
 type GraphEdge = {
@@ -71,6 +72,7 @@ type PositionedAsset = {
   x: number;
   y: number;
   angle: number;
+  ring: number;
 };
 
 type Viewport = {
@@ -93,29 +95,51 @@ const graphWidth = 1800;
 const graphHeight = 1400;
 const centerX = graphWidth / 2;
 const centerY = graphHeight / 2;
-const minZoom = 0.12;
+const minZoom = 0.06;
 const maxZoom = 3.2;
 const graphPadding = 28;
 const defaultGraphBounds: GraphBounds = { left: 0, top: 0, right: graphWidth, bottom: graphHeight };
 
-const nodeStyles: Record<GraphNodeKind, { fill: string; stroke: string; text: string }> = {
-  domain: { fill: "#2563eb", stroke: "#1746a2", text: "#163f8f" },
-  ip: { fill: "#7c3aed", stroke: "#5725ad", text: "#4b1f97" },
-  service: { fill: "#059669", stroke: "#047155", text: "#04634c" },
-  scanner: { fill: "#991b1b", stroke: "#681313", text: "#681313" },
+const nodeStyles: Record<
+  GraphNodeKind,
+  { idleFill: string; idleStroke: string; activeFill: string; activeStroke: string; text: string }
+> = {
+  root: {
+    idleFill: "#d9a6a6",
+    idleStroke: "#b77979",
+    activeFill: "#8b0000",
+    activeStroke: "#5f0000",
+    text: "#700000",
+  },
+  domain: {
+    idleFill: "#a9c2dc",
+    idleStroke: "#7899ba",
+    activeFill: "#2563a6",
+    activeStroke: "#174873",
+    text: "#174873",
+  },
+  ip: {
+    idleFill: "#c7b1d2",
+    idleStroke: "#9d7dae",
+    activeFill: "#75508d",
+    activeStroke: "#50345f",
+    text: "#50345f",
+  },
+  service: {
+    idleFill: "#a8cfc4",
+    idleStroke: "#78a99c",
+    activeFill: "#237c6e",
+    activeStroke: "#15594f",
+    text: "#15594f",
+  },
 };
 
 function truncateLabel(value: string, maxLength = 24) {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
 }
 
-function edgeColor(source: GraphNode, target: GraphNode, active: boolean) {
-  if (active) return "#7f1d2d";
-  const peripheralKind = target.kind === "scanner" ? source.kind : target.kind;
-  if (peripheralKind === "service") return "#6f9991";
-  if (peripheralKind === "ip") return "#9480a0";
-  if (source.kind === "scanner" || target.kind === "scanner") return "#7890a6";
-  return "#6f879d";
+function edgeColor(active: boolean) {
+  return active ? "#7f1d2d" : "#aebcc8";
 }
 
 function clampZoom(value: number) {
@@ -160,6 +184,7 @@ function layoutAssetGroup(group: AssetRow[], baseRing: number, ringGap: number, 
       x: centerX + Math.cos(angle) * ring,
       y: centerY + Math.sin(angle) * ring,
       angle,
+      ring,
     };
   });
 }
@@ -172,9 +197,14 @@ function layoutAssetNodes(assets: AssetRow[]) {
     .filter((asset) => !rootAssets.some((root) => root.id === asset.id))
     .sort((left, right) => left.value.localeCompare(right.value));
 
+  const positionedRoots =
+    rootAssets.length === 1
+      ? [{ asset: rootAssets[0], x: centerX, y: centerY, angle: -Math.PI / 2, ring: 0 }]
+      : layoutAssetGroup(rootAssets, 420, 360, 10);
+
   return [
-    ...layoutAssetGroup(rootAssets, 185, 145, 8),
-    ...layoutAssetGroup(childAssets, rootAssets.length > 0 ? 390 : 230, 155, 18),
+    ...positionedRoots,
+    ...layoutAssetGroup(childAssets, rootAssets.length > 0 ? 1180 : 620, 360, 42),
   ];
 }
 
@@ -188,10 +218,10 @@ function seededRandom() {
 }
 
 function collisionRadius(node: GraphNode) {
-  if (node.kind === "scanner") return 74;
-  if (node.kind === "domain") return node.alwaysLabel ? 62 : 55;
-  if (node.kind === "ip") return 48;
-  return 40;
+  if (node.kind === "root") return 120;
+  if (node.kind === "domain") return 82;
+  if (node.kind === "ip") return 72;
+  return 62;
 }
 
 function linkEndpointKind(endpoint: string | number | GraphNode) {
@@ -201,20 +231,14 @@ function linkEndpointKind(endpoint: string | number | GraphNode) {
 function linkDistance(link: ForceLink) {
   const sourceKind = linkEndpointKind(link.source);
   const targetKind = linkEndpointKind(link.target);
-  if (sourceKind === "scanner" || targetKind === "scanner") return 360;
-  if (sourceKind === "service" || targetKind === "service") return 150;
-  if (sourceKind === "ip" || targetKind === "ip") return 170;
-  return 220;
+  if (sourceKind === "service" || targetKind === "service") return 250;
+  if (sourceKind === "ip" || targetKind === "ip") return 280;
+  return 420;
 }
 
 function applyForceLayout(sourceNodes: GraphNode[], sourceEdges: GraphEdge[]) {
   const nodes = sourceNodes.map((node) => ({ ...node }));
   const links: ForceLink[] = sourceEdges.map((edge) => ({ ...edge }));
-  const scanner = nodes.find((node) => node.kind === "scanner");
-  if (scanner) {
-    scanner.fx = centerX;
-    scanner.fy = centerY;
-  }
 
   const simulation = forceSimulation<GraphNode>(nodes)
     .randomSource(seededRandom())
@@ -226,21 +250,15 @@ function applyForceLayout(sourceNodes: GraphNode[], sourceEdges: GraphEdge[]) {
       forceLink<GraphNode, ForceLink>(links)
         .id((node) => node.id)
         .distance(linkDistance)
-        .strength((link) => {
-          const sourceKind = linkEndpointKind(link.source);
-          const targetKind = linkEndpointKind(link.target);
-          return sourceKind === "scanner" || targetKind === "scanner" ? 0.055 : 0.32;
-        })
+        .strength(0.18)
         .iterations(2)
     )
     .force(
       "charge",
       forceManyBody<GraphNode>()
-        .strength((node) =>
-          node.kind === "scanner" ? -1600 : node.kind === "domain" ? -420 : node.kind === "ip" ? -320 : -220
-        )
-        .distanceMin(24)
-        .distanceMax(720)
+        .strength((node) => (node.kind === "root" ? -900 : node.kind === "domain" ? -600 : node.kind === "ip" ? -420 : -300))
+        .distanceMin(32)
+        .distanceMax(1000)
         .theta(0.88)
     )
     .force(
@@ -252,16 +270,14 @@ function applyForceLayout(sourceNodes: GraphNode[], sourceEdges: GraphEdge[]) {
     )
     .force(
       "radial",
-      forceRadial<GraphNode>(
-        (node) => (node.layer === 0 ? 0 : node.layer === 1 ? 390 : node.layer === 2 ? 690 : 940),
-        centerX,
-        centerY
-      ).strength((node) => (node.layer === 0 ? 1 : 0.055))
+      forceRadial<GraphNode>((node) => node.targetRadius, centerX, centerY).strength((node) =>
+        node.layer === 0 ? 0.24 : 0.12
+      )
     )
-    .force("center", forceCenter<GraphNode>(centerX, centerY).strength(0.45))
+    .force("center", forceCenter<GraphNode>(centerX, centerY).strength(0.24))
     .stop();
 
-  for (let tick = 0; tick < 380; tick += 1) simulation.tick();
+  for (let tick = 0; tick < 460; tick += 1) simulation.tick();
   simulation.stop();
 
   return nodes;
@@ -273,22 +289,11 @@ function buildGraph(assets: AssetRow[]) {
   const nodes = new Map<string, GraphNode>();
   const edges = new Map<string, GraphEdge>();
 
-  nodes.set("scanner", {
-    id: "scanner",
-    kind: "scanner",
-    label: "Asset Scanner",
-    sublabel: `${assets.length} asset${assets.length === 1 ? "" : "s"}`,
-    x: centerX,
-    y: centerY,
-    radius: 14,
-    alwaysLabel: true,
-    layer: 0,
-  });
-
-  for (const { asset, x, y, angle } of layoutAssetNodes(assets)) {
+  for (const { asset, x, y, angle, ring } of layoutAssetNodes(assets)) {
     const assetNodeId = `asset:${asset.id}`;
-    const assetKind: GraphNodeKind = asset.type === "ip" ? "ip" : "domain";
     const parentVisible = Boolean(asset.parentId && visibleAssetIds.has(asset.parentId));
+    const isRootAsset = Boolean(asset.isRoot || !parentVisible);
+    const assetKind: GraphNodeKind = asset.type === "ip" ? "ip" : isRootAsset ? "root" : "domain";
     const radialX = Math.cos(angle);
     const radialY = Math.sin(angle);
     const tangentX = -Math.sin(angle);
@@ -301,17 +306,20 @@ function buildGraph(assets: AssetRow[]) {
       sublabel: asset.type === "ip" ? "IP address" : asset.resolvedIp || (asset.isRoot ? "Root domain" : "Discovered asset"),
       x,
       y,
-      radius: asset.isRoot ? 10 : 7.5,
+      radius: isRootAsset ? 8 : 6,
       assetId: asset.id,
       labelDx: radialX * (asset.isRoot ? 45 : 40),
       labelDy: radialY * 40 + (Math.abs(radialY) < 0.3 ? 5 : 0),
       labelAnchor: radialX > 0.24 ? "start" : radialX < -0.24 ? "end" : "middle",
-      alwaysLabel: Boolean(asset.isRoot),
-      layer: parentVisible ? 2 : 1,
+      alwaysLabel: isRootAsset,
+      layer: isRootAsset ? 0 : 1,
+      targetRadius: ring,
     });
 
-    const source = parentVisible ? `asset:${asset.parentId}` : "scanner";
-    edges.set(`${source}->${assetNodeId}`, { id: `${source}->${assetNodeId}`, source, target: assetNodeId });
+    if (parentVisible) {
+      const source = `asset:${asset.parentId}`;
+      edges.set(`${source}->${assetNodeId}`, { id: `${source}->${assetNodeId}`, source, target: assetNodeId });
+    }
 
     if (asset.resolvedIp && asset.type !== "ip") {
       const ipNodeId = `ip:${asset.resolvedIp}`;
@@ -321,13 +329,14 @@ function buildGraph(assets: AssetRow[]) {
           kind: "ip",
           label: asset.resolvedIp,
           sublabel: "Resolved IP",
-          x: x + radialX * 82,
-          y: y + radialY * 82,
-          radius: 7,
+          x: x + radialX * 180,
+          y: y + radialY * 180,
+          radius: 5.5,
           labelDx: radialX * 35,
           labelDy: radialY * 35,
           labelAnchor: radialX > 0.24 ? "start" : radialX < -0.24 ? "end" : "middle",
-          layer: 3,
+          layer: 2,
+          targetRadius: ring + 300,
         });
       }
       edges.set(`${assetNodeId}->${ipNodeId}`, { id: `${assetNodeId}->${ipNodeId}`, source: assetNodeId, target: ipNodeId });
@@ -336,20 +345,21 @@ function buildGraph(assets: AssetRow[]) {
     const ports = normalizeAssetOpenPorts(asset.openPorts).slice(0, portRenderLimitPerAsset);
     ports.forEach((port, portIndex) => {
       const portNodeId = `port:${asset.id}:${port.number}:${port.protocol}`;
-      const offset = (portIndex - (ports.length - 1) / 2) * 54;
+      const offset = (portIndex - (ports.length - 1) / 2) * 86;
       nodes.set(portNodeId, {
         id: portNodeId,
         kind: "service",
         label: `${port.number}/${port.protocol.toUpperCase()}`,
         sublabel: port.number === 443 ? "TLS" : "Open port",
-        x: x + radialX * 128 + tangentX * offset,
-        y: y + radialY * 128 + tangentY * offset,
-        radius: 5.5,
+        x: x + radialX * 280 + tangentX * offset,
+        y: y + radialY * 280 + tangentY * offset,
+        radius: 4.5,
         assetId: asset.id,
         labelDx: radialX * 30,
         labelDy: radialY * 30,
         labelAnchor: radialX > 0.24 ? "start" : radialX < -0.24 ? "end" : "middle",
         layer: 3,
+        targetRadius: ring + 460,
       });
       edges.set(`${assetNodeId}->${portNodeId}`, { id: `${assetNodeId}->${portNodeId}`, source: assetNodeId, target: portNodeId });
     });
@@ -449,7 +459,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
   const portCount = org.assets.reduce((sum, asset) => sum + normalizeAssetOpenPorts(asset.openPorts).length, 0);
   const isDenseGraph = graph.nodes.length > 220;
   const isHugeGraph = graph.nodes.length > 700;
-  const graphFitScale = isDenseGraph ? 0.82 : 0.94;
+  const graphFitScale = isDenseGraph ? 0.9 : 0.94;
 
   const worldBounds = useMemo(() => {
     const left = (-viewport.x / viewport.zoom) - 120;
@@ -489,13 +499,25 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
       .filter((node) => {
         if (node.id === activeNodeId || node.id === selectedNodeId || node.alwaysLabel) return true;
         if (viewport.zoom >= 1.08) return true;
-        if (viewport.zoom >= 0.82) return node.kind === "domain" || node.kind === "ip";
-        if (viewport.zoom >= 0.62) return node.kind === "domain";
+        if (viewport.zoom >= 0.82) return node.kind === "root" || node.kind === "domain" || node.kind === "ip";
+        if (viewport.zoom >= 0.62) return node.kind === "root" || node.kind === "domain";
         return false;
       })
       .sort((left, right) => {
         const priority = (node: GraphNode) =>
-          node.id === activeNodeId ? 0 : node.id === selectedNodeId ? 1 : node.kind === "scanner" ? 2 : node.alwaysLabel ? 3 : node.kind === "domain" ? 4 : node.kind === "ip" ? 5 : 6;
+          node.id === activeNodeId
+            ? 0
+            : node.id === selectedNodeId
+              ? 1
+              : node.kind === "root"
+                ? 2
+                : node.alwaysLabel
+                  ? 3
+                  : node.kind === "domain"
+                    ? 4
+                    : node.kind === "ip"
+                      ? 5
+                      : 6;
         return priority(left) - priority(right);
       });
 
@@ -612,17 +634,17 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
             <div className="flex flex-wrap gap-3 text-xs font-medium text-slate-600">
               {[
-                ["domain", "Web/Domain"],
+                ["root", "Root Domain"],
+                ["domain", "Discovered Domain"],
                 ["ip", "IP Address"],
                 ["service", "Open Service"],
-                ["scanner", "Scanner"],
               ].map(([kind, label]) => (
                 <span key={kind} className="inline-flex items-center gap-1.5">
                   <span
                     className="h-2.5 w-2.5 rounded-full border"
                     style={{
-                      background: nodeStyles[kind as GraphNodeKind].fill,
-                      borderColor: nodeStyles[kind as GraphNodeKind].stroke,
+                      background: nodeStyles[kind as GraphNodeKind].activeFill,
+                      borderColor: nodeStyles[kind as GraphNodeKind].activeStroke,
                     }}
                   />
                   {label}
@@ -745,9 +767,9 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                         y1={source.y}
                         x2={target.x}
                         y2={target.y}
-                        stroke={edgeColor(source, target, isActive)}
-                        strokeWidth={isActive ? 2.4 : isHugeGraph ? 1.05 : 1.25}
-                        opacity={isActive ? 0.98 : isHugeGraph ? 0.68 : 0.76}
+                        stroke={edgeColor(isActive)}
+                        strokeWidth={isActive ? 2.4 : 1}
+                        opacity={isActive ? 0.96 : activeNodeId ? 0.22 : 0.4}
                         vectorEffect="non-scaling-stroke"
                       />
                     );
@@ -756,6 +778,8 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                   {visibleNodes.map((node) => {
                     const style = nodeStyles[node.kind];
                     const isActive = activeNodeId === node.id;
+                    const isConnected = Boolean(activeNodeId && connectedNodeIds.has(node.id));
+                    const isProminent = isActive || isConnected;
                     const labelPlacement = labelPlacements.get(node.id);
                     const primaryFontSize = (node.kind === "service" ? 12 : 14) / viewport.zoom;
                     const secondaryFontSize = 11 / viewport.zoom;
@@ -781,10 +805,10 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                         <circle r={(node.radius + 8) / viewport.zoom} fill="transparent" />
                         <circle
                           r={node.radius / viewport.zoom}
-                          fill={style.fill}
+                          fill={isProminent ? style.activeFill : style.idleFill}
                           fillOpacity={1}
-                          stroke={style.stroke}
-                          strokeWidth={(isActive ? 4 : 2) / viewport.zoom}
+                          stroke={isProminent ? style.activeStroke : style.idleStroke}
+                          strokeWidth={(isActive ? 4 : isConnected ? 2.5 : 1.5) / viewport.zoom}
                         />
                         {labelPlacement ? (
                           <text
@@ -794,7 +818,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                             dominantBaseline="middle"
                             fontSize={primaryFontSize}
                             fontWeight="650"
-                            fill={style.text}
+                            fill={isProminent ? style.text : "#64748b"}
                             stroke="#f8fafc"
                             strokeWidth={primaryStrokeWidth}
                             paintOrder="stroke"
@@ -834,7 +858,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                   </span>
                   {selectedNode.sublabel ? <span className="truncate">{selectedNode.sublabel}</span> : null}
                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                    {selectedNode.kind}
+                    {selectedNode.kind === "root" ? "root domain" : selectedNode.kind}
                   </span>
                   {selectedNode.assetId ? (
                     <Link href={`/app/${org.slug}/asset/${selectedNode.assetId}`} className="ml-auto shrink-0 font-medium text-blue-700 hover:text-blue-900">
