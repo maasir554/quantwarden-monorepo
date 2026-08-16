@@ -14,10 +14,10 @@ const METER_RADIUS = 85;
 // These boundaries must stay aligned with calculatePqcScore():
 // D 0-49, C 50-74, B 75-89, A 90-100.
 const meterSegments = [
-  { start: 0, end: 50, color: "#dc2626" },
-  { start: 50, end: 75, color: "#d97706" },
-  { start: 75, end: 90, color: "#315f9f" },
-  { start: 90, end: 100, color: "#168267" },
+  { start: 0, end: 50, color: "#dc2626", label: "D" },
+  { start: 50, end: 75, color: "#d97706", label: "C" },
+  { start: 75, end: 90, color: "#315f9f", label: "B" },
+  { start: 90, end: 100, color: "#168267", label: "A" },
 ];
 
 function pointForScore(score: number) {
@@ -64,6 +64,24 @@ export function PqcScoreMeter({ score, className, compact = false, showValue = t
             strokeLinecap="butt"
           />
         ))}
+        {meterSegments.map((segment) => {
+          const labelPoint = pointForScore((segment.start + segment.end) / 2);
+
+          return (
+            <text
+              key={`${segment.label}-label`}
+              x={labelPoint.x}
+              y={labelPoint.y + 2.5}
+              textAnchor="middle"
+              fill="#ffffff"
+              fontSize="9"
+              fontWeight="800"
+              style={{ paintOrder: "stroke", stroke: "rgba(0, 0, 0, 0.18)", strokeWidth: 0.8 }}
+            >
+              {segment.label}
+            </text>
+          );
+        })}
         <line
           x1="110"
           y1="105"
