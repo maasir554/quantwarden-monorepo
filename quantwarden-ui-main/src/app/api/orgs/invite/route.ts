@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
 import { isEmailAuthEnabled, sendEmail } from "@/lib/mailer";
 import { guestEmail, isGuestEmail, looksLikeEmail, validateUsername } from "@/lib/guest-auth";
+import { writeOrganizationAuditLog } from "@/lib/audit-log";
 
 export async function POST(req: NextRequest) {
   try {
@@ -194,6 +195,18 @@ export async function POST(req: NextRequest) {
         warnings.push(`${targetEmail}: ${err?.message || "processing error"}`);
       }
     }
+
+    await writeOrganizationAuditLog({
+      category: "team",
+      action: "team.invitations_created",
+      message: `${invites.length} team invitation${invites.length === 1 ? "" : "s"} processed.`,
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationId,
+      targetType: "invitation",
+      metadata: { requestedCount: invites.length, warningCount: warnings.length },
+      request: req,
+    });
 
     return NextResponse.json({ success: true, warnings });
   } catch (error) {

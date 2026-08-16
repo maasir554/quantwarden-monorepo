@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getOrgScanAccess } from "@/lib/org-scan-permissions";
 import { getOrgScanActivity } from "@/lib/scan-batch-server";
 import { cancelPendingScheduleRun } from "@/lib/scan-schedule-server";
+import { writeOrganizationAuditLog } from "@/lib/audit-log";
 
 export async function DELETE(
   req: NextRequest,
@@ -33,6 +34,17 @@ export async function DELETE(
     }
 
     const activity = await getOrgScanActivity(orgId, scanAccess.canScan);
+    await writeOrganizationAuditLog({
+      category: "scan",
+      action: "scan.scheduled_run_cancelled",
+      message: "Queued scheduled scan cancelled.",
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationId: orgId,
+      targetType: "scan_schedule_run",
+      targetId: runId,
+      request: req,
+    });
     return NextResponse.json({
       success: true,
       runId,

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { getOrgMemberAccess } from "@/lib/org-scan-permissions";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+import { writeOrganizationAuditLog } from "@/lib/audit-log";
 
 export async function POST(req: NextRequest) {
   try {
@@ -86,6 +87,18 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+
+    await writeOrganizationAuditLog({
+      category: "configuration",
+      action: "permissions.roles_updated",
+      message: `${roles.length} organization role${roles.length === 1 ? "" : "s"} saved.`,
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationId,
+      targetType: "role_configuration",
+      metadata: { roleCount: roles.length },
+      request: req,
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

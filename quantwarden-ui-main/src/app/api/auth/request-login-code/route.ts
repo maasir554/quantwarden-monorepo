@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isEmailAuthEnabled } from "@/lib/mailer";
+import { writeAuditLog } from "@/lib/audit-log";
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -50,6 +51,14 @@ export async function POST(req: NextRequest) {
         callbackURL,
       },
       headers: await headers(),
+    });
+
+    await writeAuditLog({
+      category: "authentication",
+      action: "authentication.login_code_requested",
+      message: `Login code requested for ${user.email}.`,
+      actorEmail: user.email,
+      request: req,
     });
 
     return NextResponse.json({ status: true });

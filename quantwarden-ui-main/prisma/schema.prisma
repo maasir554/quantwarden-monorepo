@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -17,7 +16,7 @@ model Role {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String // Role name (e.g. 'Moderator', 'Billing')
   permissions    String // JSON string of feature flags for this role
-  createdAt      DateTime @default(now())
+  createdAt      DateTime     @default(now())
 
   // We map it to members via application logic or relations, but for now Better Auth org plugin stores `role: string` on Member.
   // We'll manage features and checks in the UI & API.
@@ -25,25 +24,26 @@ model Role {
 }
 
 model User {
-  id            String       @id
-  name          String
-  email         String
-  emailVerified Boolean      @default(false)
-  isSuperAdmin  Boolean      @default(false)
-  image         String?
+  id                          String                            @id
+  name                        String
+  email                       String
+  emailVerified               Boolean                           @default(false)
+  isSuperAdmin                Boolean                           @default(false)
+  image                       String?
   // Guest (email-free) accounts. Null for normal email users. See guest-auth.ts.
-  username        String?    @unique
-  displayUsername String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  sessions      Session[]
-  accounts      Account[]
-  members       Member[]
-  invitations   Invitation[]
-  joinRequests  JoinRequest[]
-  initiatedScanBatches AssetScanBatch[] @relation("AssetScanBatchInitiator")
+  username                    String?                           @unique
+  displayUsername             String?
+  createdAt                   DateTime                          @default(now())
+  updatedAt                   DateTime                          @updatedAt
+  sessions                    Session[]
+  accounts                    Account[]
+  members                     Member[]
+  invitations                 Invitation[]
+  joinRequests                JoinRequest[]
+  initiatedScanBatches        AssetScanBatch[]                  @relation("AssetScanBatchInitiator")
   updatedPortDiscoveryConfigs OrganizationPortDiscoveryConfig[] @relation("OrganizationPortDiscoveryConfigUpdater")
-  createdScanSchedules ScanSchedule[] @relation("ScanScheduleCreator")
+  createdScanSchedules        ScanSchedule[]                    @relation("ScanScheduleCreator")
+  auditLogs                   AuditLog[]                        @relation("AuditLogActor")
 
   @@unique([email])
   @@map("user")
@@ -99,27 +99,54 @@ model Verification {
 }
 
 model Organization {
-  id          String       @id
-  name        String
-  slug        String
-  logo        String?
-  createdAt   DateTime
-  metadata    String?
-  isPublic    Boolean      @default(false)
-  discoverable Boolean     @default(false)
-  members      Member[]
-  invitations  Invitation[]
-  roles        Role[]
-  assets       Asset[]
-  assetScanBatches AssetScanBatch[]
-  scanSchedules ScanSchedule[]
-  scanScheduleRuns ScanScheduleRun[]
+  id                  String                           @id
+  name                String
+  slug                String
+  logo                String?
+  createdAt           DateTime
+  metadata            String?
+  isPublic            Boolean                          @default(false)
+  discoverable        Boolean                          @default(false)
+  members             Member[]
+  invitations         Invitation[]
+  roles               Role[]
+  assets              Asset[]
+  assetScanBatches    AssetScanBatch[]
+  scanSchedules       ScanSchedule[]
+  scanScheduleRuns    ScanScheduleRun[]
   portDiscoveryConfig OrganizationPortDiscoveryConfig?
-  nmapAssets   NmapAsset[]
-  joinRequests JoinRequest[]
+  nmapAssets          NmapAsset[]
+  joinRequests        JoinRequest[]
+  auditLogs           AuditLog[]
 
   @@unique([slug])
   @@map("organization")
+}
+
+model AuditLog {
+  id               String        @id @default(cuid())
+  category         String
+  action           String
+  status           String        @default("success")
+  message          String
+  actorUserId      String?
+  actor            User?         @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorEmail       String?
+  organizationId   String?
+  organization     Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  organizationName String?
+  targetType       String?
+  targetId         String?
+  dedupeKey        String?       @unique
+  ipAddress        String?
+  userAgent        String?
+  metadata         Json?
+  createdAt        DateTime      @default(now())
+
+  @@index([category, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("audit_log")
 }
 
 model Member {
@@ -182,26 +209,26 @@ model JoinRequest {
 }
 
 model Asset {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  value          String
-  type           String       @default("domain") // "domain" or "ip"
-  isRoot         Boolean      @default(true)
-  parentId       String?
-  parent         Asset?       @relation("AssetHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children       Asset[]      @relation("AssetHierarchy")
-  verified       Boolean      @default(false)
-  resolvedIp     String?      // The resolved IP address for domain/subdomain assets
-  openPorts      String?      // JSON string array of { number, protocol } open ports; defaults to [{ number: 443, protocol: "tcp" }] until discovery runs
-  bucket         String       @default("General")
-  buckets        String?      // JSON string array of functional buckets; bucket remains the primary compatibility label
-  scanStatus     String       @default("idle") // idle, scanning, failed
-  lastScanDate   DateTime?
-  portDiscoveryStatus String  @default("idle") // idle, scanning, completed, expired, failed
+  id                    String       @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  value                 String
+  type                  String       @default("domain") // "domain" or "ip"
+  isRoot                Boolean      @default(true)
+  parentId              String?
+  parent                Asset?       @relation("AssetHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children              Asset[]      @relation("AssetHierarchy")
+  verified              Boolean      @default(false)
+  resolvedIp            String? // The resolved IP address for domain/subdomain assets
+  openPorts             String? // JSON string array of { number, protocol } open ports; defaults to [{ number: 443, protocol: "tcp" }] until discovery runs
+  bucket                String       @default("General")
+  buckets               String? // JSON string array of functional buckets; bucket remains the primary compatibility label
+  scanStatus            String       @default("idle") // idle, scanning, failed
+  lastScanDate          DateTime?
+  portDiscoveryStatus   String       @default("idle") // idle, scanning, completed, expired, failed
   lastPortDiscoveryDate DateTime?
-  scans          AssetScan[]
-  createdAt      DateTime     @default(now())
+  scans                 AssetScan[]
+  createdAt             DateTime     @default(now())
 
   @@unique([organizationId, value])
   @@index([organizationId])
@@ -209,18 +236,18 @@ model Asset {
 }
 
 model AssetScan {
-  id          String   @id @default(cuid())
-  assetId     String
-  asset       Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  batchId     String?
-  batch       AssetScanBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  type        String   @default("openssl") // The type of TLS scan
-  portNumber  Int?
+  id           String          @id @default(cuid())
+  assetId      String
+  asset        Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  batchId      String?
+  batch        AssetScanBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  type         String          @default("openssl") // The type of TLS scan
+  portNumber   Int?
   portProtocol String?
-  status      String   @default("pending") // pending, running, completed, failed
-  resultData  String?  // JSON text representation of the scanner output
-  createdAt   DateTime @default(now())
-  completedAt DateTime?
+  status       String          @default("pending") // pending, running, completed, failed
+  resultData   String? // JSON text representation of the scanner output
+  createdAt    DateTime        @default(now())
+  completedAt  DateTime?
 
   @@index([assetId])
   @@index([batchId])
@@ -235,7 +262,7 @@ model AssetScanBatch {
   initiatedByUserId String
   initiatedBy       User         @relation("AssetScanBatchInitiator", fields: [initiatedByUserId], references: [id], onDelete: Cascade)
   engine            String       @default("openssl") // openssl, portDiscovery
-  type              String       // single, group, full
+  type              String // single, group, full
   status            String       @default("queued") // queued, running, completed, failed
   configSnapshot    String?
   totalAssets       Int          @default(0)
@@ -252,26 +279,26 @@ model AssetScanBatch {
 }
 
 model OrganizationPortDiscoveryConfig {
-  id               String       @id @default(cuid())
-  organizationId   String       @unique
-  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  entries          String
-  probeBatchSize   Int          @default(5)
-  probeTimeoutMs   Int          @default(600)
-  updatedByUserId  String?
-  updatedBy        User?        @relation("OrganizationPortDiscoveryConfigUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  id              String       @id @default(cuid())
+  organizationId  String       @unique
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entries         String
+  probeBatchSize  Int          @default(5)
+  probeTimeoutMs  Int          @default(600)
+  updatedByUserId String?
+  updatedBy       User?        @relation("OrganizationPortDiscoveryConfigUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   @@map("organization_port_discovery_config")
 }
 
 model ScanSchedule {
-  id              String       @id @default(cuid())
+  id              String            @id @default(cuid())
   organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdByUserId String
-  createdBy       User         @relation("ScanScheduleCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  createdBy       User              @relation("ScanScheduleCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
   engine          String
   type            String
   mode            String
@@ -281,11 +308,11 @@ model ScanSchedule {
   nextRunAt       DateTime?
   assetIds        String
   configSnapshot  String?
-  enabled         Boolean      @default(true)
+  enabled         Boolean           @default(true)
   timezone        String?
   lastRunAt       DateTime?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
   runs            ScanScheduleRun[]
 
   @@index([organizationId, enabled, nextRunAt])
@@ -294,18 +321,18 @@ model ScanSchedule {
 }
 
 model ScanScheduleRun {
-  id            String       @id @default(cuid())
-  scheduleId    String
-  schedule      ScanSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  id             String       @id @default(cuid())
+  scheduleId     String
+  schedule       ScanSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   organizationId String
-  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  status        String       @default("pending")
-  dueAt         DateTime
-  queuedBatchId String?
-  error         String?
-  createdAt     DateTime     @default(now())
-  startedAt     DateTime?
-  completedAt   DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  status         String       @default("pending")
+  dueAt          DateTime
+  queuedBatchId  String?
+  error          String?
+  createdAt      DateTime     @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
 
   @@index([organizationId, status, dueAt])
   @@index([scheduleId, dueAt])
@@ -313,15 +340,15 @@ model ScanScheduleRun {
 }
 
 model NmapAsset {
-  id             String       @id @default(cuid())
+  id             String          @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  target         String       // The domain or IP added by the user
-  resolvedIp     String?      // The resolved IP address populated after scanning
-  scanStatus     String       @default("idle") // idle, scanning, completed, failed
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  target         String // The domain or IP added by the user
+  resolvedIp     String? // The resolved IP address populated after scanning
+  scanStatus     String          @default("idle") // idle, scanning, completed, failed
   lastScanDate   DateTime?
   scans          NmapAssetScan[]
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime        @default(now())
 
   @@unique([organizationId, target])
   @@index([organizationId])
@@ -329,12 +356,12 @@ model NmapAsset {
 }
 
 model NmapAssetScan {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   assetId     String
   asset       NmapAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  status      String   @default("pending") // pending, completed, failed
-  resultData  String?  // JSON text payload from the nmap API response
-  createdAt   DateTime @default(now())
+  status      String    @default("pending") // pending, completed, failed
+  resultData  String? // JSON text payload from the nmap API response
+  createdAt   DateTime  @default(now())
   completedAt DateTime?
 
   @@index([assetId])

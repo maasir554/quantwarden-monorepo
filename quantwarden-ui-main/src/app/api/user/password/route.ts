@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { isGuestEmail, validatePassword } from "@/lib/guest-auth";
 import { prisma } from "@/lib/prisma";
+import { writeAuditLog } from "@/lib/audit-log";
 
 async function getVerifiedEmailSession() {
   const requestHeaders = await headers();
@@ -88,6 +89,17 @@ export async function POST(req: NextRequest) {
         headers: authResult.requestHeaders,
       });
     }
+
+    await writeAuditLog({
+      category: "authentication",
+      action: hasPassword ? "account.password_changed" : "account.password_added",
+      message: hasPassword ? "Account password changed." : "Password authentication enabled for account.",
+      actorUserId: authResult.session.user.id,
+      actorEmail: authResult.session.user.email,
+      targetType: "user",
+      targetId: authResult.session.user.id,
+      request: req,
+    });
 
     return NextResponse.json({ success: true, hasPassword: true });
   } catch (error) {

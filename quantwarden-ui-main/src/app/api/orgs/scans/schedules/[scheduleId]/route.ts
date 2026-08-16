@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getOrgScanAccess } from "@/lib/org-scan-permissions";
 import { deleteScanSchedule, updateScanSchedule } from "@/lib/scan-schedule-server";
+import { writeOrganizationAuditLog } from "@/lib/audit-log";
 
 interface RouteContext {
   params: Promise<{
@@ -45,6 +46,19 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       timezone: body?.timezone,
     });
 
+    await writeOrganizationAuditLog({
+      category: "scan",
+      action: "scan.schedule_updated",
+      message: `Scan schedule ${schedule.enabled ? "enabled or updated" : "disabled"}.`,
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationId: orgId,
+      targetType: "scan_schedule",
+      targetId: scheduleId,
+      metadata: { engine: schedule.engine, mode: schedule.mode, enabled: schedule.enabled },
+      request: req,
+    });
+
     return NextResponse.json({ schedule });
   } catch (error: any) {
     console.error("Update scan schedule error:", error);
@@ -77,6 +91,18 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     if (!deleted) {
       return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
     }
+
+    await writeOrganizationAuditLog({
+      category: "scan",
+      action: "scan.schedule_deleted",
+      message: "Scan schedule deleted.",
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationId: orgId,
+      targetType: "scan_schedule",
+      targetId: scheduleId,
+      request: req,
+    });
 
     return NextResponse.json({ ok: true });
   } catch (error) {

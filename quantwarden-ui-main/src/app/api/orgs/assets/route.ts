@@ -5,6 +5,7 @@ import { inferAssetBuckets, normalizeAssetBucket, normalizeAssetBuckets } from "
 import { normalizeAssetOpenPorts } from "@/lib/port-discovery";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+import { writeOrganizationAuditLog } from "@/lib/audit-log";
 
 export async function GET(req: NextRequest) {
   try {
@@ -118,6 +119,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    await writeOrganizationAuditLog({
+      category: "organization",
+      action: "asset.created",
+      message: `Asset ${value} added.`,
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationId: orgId,
+      targetType: "asset",
+      targetId: assetId,
+      metadata: { assetType: type || "domain", isRoot: Boolean(isRoot) },
+      request: req,
+    });
+
     return NextResponse.json({ success: true, asset: { id: assetId, bucket: normalizedBucket, buckets: normalizedBuckets } });
   } catch (error) {
     console.error("Asset insert error:", error);
@@ -157,6 +171,18 @@ export async function DELETE(req: NextRequest) {
       ids,
       orgId
     );
+
+    await writeOrganizationAuditLog({
+      category: "organization",
+      action: "asset.deleted",
+      message: `${deleted} asset${deleted === 1 ? "" : "s"} deleted.`,
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationId: orgId,
+      targetType: "asset",
+      metadata: { assetCount: Number(deleted) },
+      request: req,
+    });
 
     return NextResponse.json({ success: true, deleted });
   } catch (error) {
@@ -262,6 +288,19 @@ export async function PATCH(req: NextRequest) {
 
       throw dbError;
     }
+
+    await writeOrganizationAuditLog({
+      category: "configuration",
+      action: "asset.configuration_updated",
+      message: "Asset ports or bucket configuration updated.",
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationId: orgId,
+      targetType: "asset",
+      targetId: id,
+      metadata: { portsUpdated: hasOpenPortsUpdate, bucketsUpdated: hasBucketUpdate },
+      request: req,
+    });
 
     return NextResponse.json({
       success: true,

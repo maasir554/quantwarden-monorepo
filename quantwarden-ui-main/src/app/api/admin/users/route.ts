@@ -8,6 +8,7 @@ import {
   revokeSuperAdminMemberships,
 } from "@/lib/super-admin";
 import { auth } from "@/lib/auth";
+import { writeAuditLog } from "@/lib/audit-log";
 
 function normalizeEmail(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -118,6 +119,17 @@ export async function POST(req: NextRequest) {
       return created;
     });
 
+    await writeAuditLog({
+      category: "authentication",
+      action: "account.created_by_admin",
+      message: `Administrator created verified account ${user.email}.`,
+      actorUserId: admin.session.user.id,
+      actorEmail: admin.session.user.email,
+      targetType: "user",
+      targetId: user.id,
+      request: req,
+    });
+
     return NextResponse.json({ success: true, user }, { status: 201 });
   } catch (error) {
     console.error("Admin users POST error:", error);
@@ -160,6 +172,17 @@ export async function PATCH(req: NextRequest) {
       } else {
         await revokeSuperAdminMemberships(target.id);
       }
+
+      await writeAuditLog({
+        category: "authentication",
+        action: makeSuperAdmin ? "account.super_admin_granted" : "account.super_admin_revoked",
+        message: `Super-admin access ${makeSuperAdmin ? "granted to" : "revoked from"} ${target.email}.`,
+        actorUserId: admin.session.user.id,
+        actorEmail: admin.session.user.email,
+        targetType: "user",
+        targetId: target.id,
+        request: req,
+      });
 
       return NextResponse.json({ success: true, superAdmin: makeSuperAdmin });
     }
@@ -221,6 +244,17 @@ export async function PATCH(req: NextRequest) {
       }
     });
 
+    await writeAuditLog({
+      category: "authentication",
+      action: passwordHash ? "account.profile_and_password_updated" : "account.profile_updated",
+      message: `Administrator updated account ${email}${passwordHash ? " and reset its password" : ""}.`,
+      actorUserId: admin.session.user.id,
+      actorEmail: admin.session.user.email,
+      targetType: "user",
+      targetId: userId,
+      request: req,
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Admin users PATCH error:", error);
@@ -263,6 +297,16 @@ export async function DELETE(req: NextRequest) {
     }
 
     await prisma.user.delete({ where: { id: userId } });
+    await writeAuditLog({
+      category: "authentication",
+      action: "account.deleted_by_admin",
+      message: `Administrator deleted account ${target.email}.`,
+      actorUserId: admin.session.user.id,
+      actorEmail: admin.session.user.email,
+      targetType: "user",
+      targetId: userId,
+      request: req,
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Admin users DELETE error:", error);

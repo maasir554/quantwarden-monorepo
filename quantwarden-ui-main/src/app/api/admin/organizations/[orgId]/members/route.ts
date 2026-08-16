@@ -5,6 +5,7 @@ import {
   getSuperAdminAuth,
   isSuperAdminEmail,
 } from "@/lib/super-admin";
+import { writeOrganizationAuditLog } from "@/lib/audit-log";
 
 async function resolveContext(context: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await context.params;
@@ -98,6 +99,18 @@ export async function POST(
     await prisma.member.create({
       data: { id: crypto.randomUUID(), organizationId, userId, role, createdAt: new Date() },
     });
+    await writeOrganizationAuditLog({
+      category: "team",
+      action: "team.member_added_by_admin",
+      message: `Super administrator added a member with the ${role} role.`,
+      actorUserId: admin.session.user.id,
+      actorEmail: admin.session.user.email,
+      organizationId,
+      targetType: "user",
+      targetId: userId,
+      metadata: { role },
+      request: req,
+    });
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (error) {
     console.error("Admin members POST error:", error);
@@ -133,6 +146,18 @@ export async function PATCH(
     }
 
     await prisma.member.update({ where: { id: memberId }, data: { role } });
+    await writeOrganizationAuditLog({
+      category: "team",
+      action: "team.member_role_updated_by_admin",
+      message: `Super administrator changed a member role from ${member.role} to ${role}.`,
+      actorUserId: admin.session.user.id,
+      actorEmail: admin.session.user.email,
+      organizationId,
+      targetType: "user",
+      targetId: member.userId,
+      metadata: { previousRole: member.role, newRole: role },
+      request: req,
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Admin members PATCH error:", error);
@@ -160,6 +185,18 @@ export async function DELETE(
     }
 
     await prisma.member.delete({ where: { id: memberId } });
+    await writeOrganizationAuditLog({
+      category: "team",
+      action: "team.member_removed_by_admin",
+      message: "Super administrator removed a member.",
+      actorUserId: admin.session.user.id,
+      actorEmail: admin.session.user.email,
+      organizationId,
+      targetType: "user",
+      targetId: member.userId,
+      metadata: { previousRole: member.role },
+      request: req,
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Admin members DELETE error:", error);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+import { writeAuditLog } from "@/lib/audit-log";
 
 export async function DELETE(req: NextRequest) {
   try {
@@ -64,6 +65,18 @@ export async function DELETE(req: NextRequest) {
     // this single cleanly-typed Prisma command deletes all associated data automatically.
     await prisma.organization.delete({
       where: { id: organizationId }
+    });
+
+    await writeAuditLog({
+      category: "organization",
+      action: "organization.deleted",
+      message: `Organization ${org.name} deleted.`,
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationName: org.name,
+      targetType: "organization",
+      targetId: organizationId,
+      request: req,
     });
 
     return NextResponse.json({ success: true });

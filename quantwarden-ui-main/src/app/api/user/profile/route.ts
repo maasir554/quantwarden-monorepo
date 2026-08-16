@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+import { writeAuditLog } from "@/lib/audit-log";
 
 export async function GET() {
   try {
@@ -53,6 +54,17 @@ export async function PATCH(req: NextRequest) {
         name: true,
         email: true,
       },
+    });
+
+    await writeAuditLog({
+      category: "authentication",
+      action: "account.profile_updated",
+      message: "User profile updated.",
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      targetType: "user",
+      targetId: session.user.id,
+      request: req,
     });
 
     return NextResponse.json({ success: true, user: updatedUser });

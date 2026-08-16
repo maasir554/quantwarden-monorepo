@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
 import { enqueueOnboardingWorkflow } from "@/lib/scan-workflow";
+import { writeOrganizationAuditLog } from "@/lib/audit-log";
 
 export async function POST(req: NextRequest) {
   try {
@@ -146,6 +147,23 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    await writeOrganizationAuditLog({
+      category: "configuration",
+      action: setupComplete === true ? "organization.setup_completed" : "organization.setup_updated",
+      message: setupComplete === true ? "Organization setup completed." : "Organization setup configuration updated.",
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationId,
+      targetType: "organization",
+      targetId: organizationId,
+      metadata: {
+        domainCount: Array.isArray(domains) ? domains.length : 0,
+        roleCount: Array.isArray(roles) ? roles.length : 0,
+        setupComplete: setupComplete === true,
+      },
+      request: req,
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

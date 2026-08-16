@@ -8,6 +8,7 @@ import {
   normalizePortDiscoveryConfig,
   parseStoredPortDiscoveryConfig,
 } from "@/lib/port-discovery";
+import { writeOrganizationAuditLog } from "@/lib/audit-log";
 
 async function loadConfig(orgId: string) {
   const rows = await prisma.$queryRawUnsafe<Array<{
@@ -127,6 +128,22 @@ export async function PUT(req: NextRequest) {
       config.probeTimeoutMs,
       session.user.id
     );
+
+    await writeOrganizationAuditLog({
+      category: "configuration",
+      action: "configuration.port_discovery_updated",
+      message: "Port discovery probe settings updated.",
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationId: orgId,
+      targetType: "port_discovery_config",
+      metadata: {
+        enabledPortCount: config.entries.filter((entry) => entry.enabled).length,
+        probeBatchSize: config.probeBatchSize,
+        probeTimeoutMs: config.probeTimeoutMs,
+      },
+      request: req,
+    });
 
     return NextResponse.json({
       success: true,

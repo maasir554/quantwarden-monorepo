@@ -6,6 +6,7 @@ import { getOrgScanActivity } from "@/lib/scan-batch-server";
 import { createScanBatch, isCreateScanBatchFailure } from "@/lib/scan-batch-create";
 import { notifyScanWorkerOfManualBatch } from "@/lib/scan-worker-wake";
 import type { ScanBatchType, ScanEngine } from "@/lib/scan-activity-types";
+import { writeOrganizationAuditLog } from "@/lib/audit-log";
 
 interface CreateBatchBody {
   orgId?: string;
@@ -88,6 +89,19 @@ export async function POST(req: NextRequest) {
         status: wakeResult.status,
       });
     }
+
+    await writeOrganizationAuditLog({
+      category: "scan",
+      action: "scan.batch_created",
+      message: `${engine} scan queued for ${result.queuedAssets} asset${result.queuedAssets === 1 ? "" : "s"}.`,
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationId: orgId,
+      targetType: "scan_batch",
+      targetId: result.batchId,
+      metadata: { engine, type, assetCount: result.queuedAssets },
+      request: req,
+    });
 
     return NextResponse.json({
       success: true,

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { getOrgMemberAccess } from "@/lib/org-scan-permissions";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+import { writeOrganizationAuditLog } from "@/lib/audit-log";
 
 // GET /api/orgs/members?orgId=...
 export async function GET(req: NextRequest) {
@@ -88,6 +89,19 @@ export async function PATCH(req: NextRequest) {
       organizationId
     );
 
+    await writeOrganizationAuditLog({
+      category: "team",
+      action: "team.member_role_updated",
+      message: `Member role changed from ${targetRows[0].role} to ${newRole}.`,
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationId,
+      targetType: "user",
+      targetId: targetRows[0].userId,
+      metadata: { previousRole: targetRows[0].role, newRole },
+      request: req,
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("PATCH member error:", error);
@@ -141,6 +155,19 @@ export async function DELETE(req: NextRequest) {
       memberId,
       organizationId
     );
+
+    await writeOrganizationAuditLog({
+      category: "team",
+      action: isLeavingSelf ? "team.member_left" : "team.member_removed",
+      message: isLeavingSelf ? "Member left the organization." : "Member removed from the organization.",
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationId,
+      targetType: "user",
+      targetId: targetRows[0].userId,
+      metadata: { previousRole: targetRows[0].role },
+      request: req,
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

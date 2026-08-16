@@ -4,6 +4,7 @@ import { organization, magicLink, username } from "better-auth/plugins";
 import { prisma } from "@/lib/prisma";
 import { isEmailAuthEnabled, sendEmail } from "@/lib/mailer";
 import { isGuestAuthEnabled } from "@/lib/guest-auth";
+import { writeAuditLog } from "@/lib/audit-log";
 
 function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -110,6 +111,63 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql", 
   }),
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          await writeAuditLog({
+            category: "authentication",
+            action: "account.created",
+            message: `Account created for ${user.email}.`,
+            actorUserId: user.id,
+            actorEmail: user.email,
+            targetType: "user",
+            targetId: user.id,
+          });
+        },
+      },
+    },
+    session: {
+      create: {
+        after: async (session) => {
+          const user = await prisma.user.findUnique({
+            where: { id: session.userId },
+            select: { email: true },
+          });
+          await writeAuditLog({
+            category: "authentication",
+            action: "session.signed_in",
+            message: `Successful sign-in for ${user?.email || session.userId}.`,
+            actorUserId: session.userId,
+            actorEmail: user?.email,
+            targetType: "session",
+            targetId: session.id,
+            ipAddress: session.ipAddress,
+            userAgent: session.userAgent,
+          });
+        },
+      },
+      delete: {
+        before: async (session) => {
+          const user = await prisma.user.findUnique({
+            where: { id: session.userId },
+            select: { email: true },
+          });
+          await writeAuditLog({
+            category: "authentication",
+            action: "session.ended",
+            message: `Session ended for ${user?.email || session.userId}.`,
+            actorUserId: session.userId,
+            actorEmail: user?.email,
+            targetType: "session",
+            targetId: session.id,
+            ipAddress: session.ipAddress,
+            userAgent: session.userAgent,
+          });
+        },
+      },
+    },
+  },
   emailAndPassword: {
     // Public email signup remains blocked by the auth route. Enabling the
     // credential provider lets a verified email user optionally attach a

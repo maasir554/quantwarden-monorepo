@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getOrgScanAccess } from "@/lib/org-scan-permissions";
 import { createScanSchedule, listScanSchedulesForOrganization } from "@/lib/scan-schedule-server";
 import { notifyScanWorkerOfSchedule } from "@/lib/scan-worker-wake";
+import { writeOrganizationAuditLog } from "@/lib/audit-log";
 
 export async function GET(req: NextRequest) {
   try {
@@ -81,6 +82,19 @@ export async function POST(req: NextRequest) {
       orgId,
       scheduleId: schedule.id,
       nextRunAt: schedule.nextRunAt,
+    });
+
+    await writeOrganizationAuditLog({
+      category: "scan",
+      action: "scan.schedule_created",
+      message: `${schedule.engine} scan schedule created.`,
+      actorUserId: session.user.id,
+      actorEmail: session.user.email,
+      organizationId: orgId,
+      targetType: "scan_schedule",
+      targetId: schedule.id,
+      metadata: { engine: schedule.engine, mode: schedule.mode, enabled: schedule.enabled },
+      request: req,
     });
 
     return NextResponse.json({ schedule }, { status: 201 });

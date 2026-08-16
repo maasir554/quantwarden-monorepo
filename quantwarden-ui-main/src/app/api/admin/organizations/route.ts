@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ensureSuperAdminMemberships, getSuperAdminAuth } from "@/lib/super-admin";
+import { writeOrganizationAuditLog } from "@/lib/audit-log";
 
 export async function GET() {
   try {
@@ -55,6 +56,19 @@ export async function PATCH(req: NextRequest) {
         isPublic: Boolean(body.isPublic),
         discoverable: Boolean(body.discoverable),
       },
+    });
+
+    await writeOrganizationAuditLog({
+      category: "configuration",
+      action: "organization.settings_updated_by_admin",
+      message: "Organization settings updated by a super administrator.",
+      actorUserId: admin.session.user.id,
+      actorEmail: admin.session.user.email,
+      organizationId,
+      targetType: "organization",
+      targetId: organizationId,
+      metadata: { requestsAllowed: Boolean(body.isPublic) },
+      request: req,
     });
 
     return NextResponse.json({ success: true });

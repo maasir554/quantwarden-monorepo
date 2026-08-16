@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { writeOrganizationAuditLog } from "@/lib/audit-log";
 import type {
   OrgScanActivityPayload,
   ScanActivityBatch,
@@ -365,7 +366,27 @@ export async function refreshScanBatch(batchId: string) {
     batchId
   );
 
-  return rows[0] ?? null;
+  const batch = rows[0] ?? null;
+  if (batch && ["completed", "failed", "cancelled"].includes(batch.status)) {
+    await writeOrganizationAuditLog({
+      category: "scan",
+      action: `scan.batch_${batch.status}`,
+      status: batch.status === "completed" ? "success" : "failure",
+      message: `${batch.engine} scan batch ${batch.status}: ${batch.completedAssets} completed, ${batch.failedAssets} failed.`,
+      organizationId: batch.organizationId,
+      targetType: "scan_batch",
+      targetId: batch.id,
+      dedupeKey: `scan.batch_terminal:${batch.id}`,
+      metadata: {
+        engine: batch.engine,
+        batchType: batch.type,
+        totalAssets: batch.totalAssets,
+        completedAssets: batch.completedAssets,
+        failedAssets: batch.failedAssets,
+      },
+    });
+  }
+  return batch;
 }
 
 export async function refreshOpenSSLAssetState(assetId: string, orgId: string) {
