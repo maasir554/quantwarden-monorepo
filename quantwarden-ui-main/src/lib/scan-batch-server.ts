@@ -368,11 +368,14 @@ export async function refreshScanBatch(batchId: string) {
 
   const batch = rows[0] ?? null;
   if (batch && ["completed", "failed", "cancelled"].includes(batch.status)) {
+    const hasPartialResults = batch.status === "failed" && batch.completedAssets > 0 && batch.failedAssets > 0;
     await writeOrganizationAuditLog({
       category: "scan",
-      action: `scan.batch_${batch.status}`,
-      status: batch.status === "completed" ? "success" : "failure",
-      message: `${batch.engine} scan batch ${batch.status}: ${batch.completedAssets} completed, ${batch.failedAssets} failed.`,
+      action: hasPartialResults ? "scan.batch_partial" : `scan.batch_${batch.status}`,
+      status: hasPartialResults ? "warning" : batch.status === "completed" ? "success" : "failure",
+      message: hasPartialResults
+        ? `${batch.engine} scan batch completed with issues: ${batch.completedAssets} completed, ${batch.failedAssets} unsuccessful.`
+        : `${batch.engine} scan batch ${batch.status}: ${batch.completedAssets} completed, ${batch.failedAssets} failed.`,
       organizationId: batch.organizationId,
       targetType: "scan_batch",
       targetId: batch.id,

@@ -40,6 +40,31 @@ function logLine(log: {
   return `${log.createdAt.toISOString()} [${log.status.toUpperCase()}] [${log.category}] ${log.action} ${context} - ${log.message}${metadata}`;
 }
 
+function normalizePartialScanLog<Log extends {
+  category: string;
+  action: string;
+  status: string;
+  message: string;
+  metadata: unknown;
+}>(log: Log): Log {
+  if (log.category !== "scan" || log.status !== "failure" || !log.metadata || typeof log.metadata !== "object") {
+    return log;
+  }
+
+  const metadata = log.metadata as Record<string, unknown>;
+  const completedAssets = Number(metadata.completedAssets || 0);
+  const failedAssets = Number(metadata.failedAssets || 0);
+  if (completedAssets <= 0 || failedAssets <= 0) return log;
+
+  const engine = typeof metadata.engine === "string" ? metadata.engine : "Scan";
+  return {
+    ...log,
+    action: "scan.batch_partial",
+    status: "warning",
+    message: `${engine} scan batch completed with issues: ${completedAssets} completed, ${failedAssets} unsuccessful.`,
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const admin = await getSuperAdminAuth();
@@ -58,7 +83,8 @@ export async function GET(req: NextRequest) {
       } : {}),
     };
 
-    const logs = await prisma.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, take });
+    const logs = (await prisma.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, take }))
+      .map(normalizePartialScanLog);
 
     if (req.nextUrl.searchParams.get("format") === "txt") {
       const header = [

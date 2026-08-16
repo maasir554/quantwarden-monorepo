@@ -9,7 +9,7 @@ export const AUDIT_CATEGORIES = [
 ] as const;
 
 export type AuditCategory = (typeof AUDIT_CATEGORIES)[number];
-export type AuditStatus = "success" | "failure";
+export type AuditStatus = "success" | "warning" | "failure";
 
 type AuditRequest = Request | { headers: Headers } | null | undefined;
 

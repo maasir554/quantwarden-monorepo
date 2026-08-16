@@ -27,7 +27,7 @@ type AuditLog = {
   id: string;
   category: "authentication" | "organization" | "scan" | "team" | "configuration";
   action: string;
-  status: "success" | "failure";
+  status: "success" | "warning" | "failure";
   message: string;
   actorEmail: string | null;
   organizationId: string | null;
@@ -207,8 +207,9 @@ function AuditLogPanel({
                   </td>
                   <td className="max-w-xl px-4 py-4">
                     <div className="flex items-center gap-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${log.status === "failure" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}>{auditCategoryLabels[log.category]}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${log.status === "failure" ? "bg-red-50 text-red-700" : log.status === "warning" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>{auditCategoryLabels[log.category]}</span>
                       {log.status === "failure" ? <span className="text-xs font-medium text-red-700">Failed</span> : null}
+                      {log.status === "warning" ? <span className="text-xs font-medium text-amber-700">Partial results</span> : null}
                     </div>
                     <p className="mt-1.5 font-medium text-slate-950">{log.message}</p>
                     <p className="mt-0.5 font-mono text-xs text-slate-400">{log.action}</p>
