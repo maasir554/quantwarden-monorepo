@@ -87,20 +87,22 @@ type LabelPlacement = {
 };
 
 type ScreenBox = { left: number; top: number; right: number; bottom: number };
+type GraphBounds = { left: number; top: number; right: number; bottom: number };
 
 const graphWidth = 1800;
 const graphHeight = 1400;
 const centerX = graphWidth / 2;
 const centerY = graphHeight / 2;
-const minZoom = 0.32;
+const minZoom = 0.12;
 const maxZoom = 3.2;
 const graphPadding = 28;
+const defaultGraphBounds: GraphBounds = { left: 0, top: 0, right: graphWidth, bottom: graphHeight };
 
 const nodeStyles: Record<GraphNodeKind, { fill: string; stroke: string; text: string }> = {
-  domain: { fill: "#315f8c", stroke: "#173f66", text: "#173a5e" },
-  ip: { fill: "#76508c", stroke: "#513464", text: "#432751" },
-  service: { fill: "#2b7a6c", stroke: "#17584f", text: "#174f48" },
-  scanner: { fill: "#982c38", stroke: "#681c24", text: "#681c24" },
+  domain: { fill: "#2563eb", stroke: "#1746a2", text: "#163f8f" },
+  ip: { fill: "#7c3aed", stroke: "#5725ad", text: "#4b1f97" },
+  service: { fill: "#059669", stroke: "#047155", text: "#04634c" },
+  scanner: { fill: "#991b1b", stroke: "#681313", text: "#681313" },
 };
 
 function truncateLabel(value: string, maxLength = 24) {
@@ -120,15 +122,24 @@ function clampZoom(value: number) {
   return Math.min(maxZoom, Math.max(minZoom, Number(value.toFixed(2))));
 }
 
-function getFitViewport(width: number, height: number): Viewport {
+function getFitViewport(
+  width: number,
+  height: number,
+  bounds: GraphBounds = defaultGraphBounds,
+  fitScale = 1
+): Viewport {
   const availableWidth = Math.max(320, width - graphPadding * 2);
   const availableHeight = Math.max(260, height - graphPadding * 2);
-  const zoom = clampZoom(Math.min(availableWidth / graphWidth, availableHeight / graphHeight));
+  const boundsWidth = Math.max(1, bounds.right - bounds.left);
+  const boundsHeight = Math.max(1, bounds.bottom - bounds.top);
+  const boundsCenterX = bounds.left + boundsWidth / 2;
+  const boundsCenterY = bounds.top + boundsHeight / 2;
+  const zoom = clampZoom(Math.min(availableWidth / boundsWidth, availableHeight / boundsHeight) * fitScale);
 
   return {
     zoom,
-    x: (width - graphWidth * zoom) / 2,
-    y: (height - graphHeight * zoom) / 2,
+    x: width / 2 - boundsCenterX * zoom,
+    y: height / 2 - boundsCenterY * zoom,
   };
 }
 
@@ -177,10 +188,10 @@ function seededRandom() {
 }
 
 function collisionRadius(node: GraphNode) {
-  if (node.kind === "scanner") return 58;
-  if (node.kind === "domain") return node.alwaysLabel ? 46 : 39;
-  if (node.kind === "ip") return 34;
-  return 27;
+  if (node.kind === "scanner") return 74;
+  if (node.kind === "domain") return node.alwaysLabel ? 62 : 55;
+  if (node.kind === "ip") return 48;
+  return 40;
 }
 
 function linkEndpointKind(endpoint: string | number | GraphNode) {
@@ -190,10 +201,10 @@ function linkEndpointKind(endpoint: string | number | GraphNode) {
 function linkDistance(link: ForceLink) {
   const sourceKind = linkEndpointKind(link.source);
   const targetKind = linkEndpointKind(link.target);
-  if (sourceKind === "scanner" || targetKind === "scanner") return 280;
-  if (sourceKind === "service" || targetKind === "service") return 105;
-  if (sourceKind === "ip" || targetKind === "ip") return 120;
-  return 165;
+  if (sourceKind === "scanner" || targetKind === "scanner") return 360;
+  if (sourceKind === "service" || targetKind === "service") return 150;
+  if (sourceKind === "ip" || targetKind === "ip") return 170;
+  return 220;
 }
 
 function applyForceLayout(sourceNodes: GraphNode[], sourceEdges: GraphEdge[]) {
@@ -226,7 +237,7 @@ function applyForceLayout(sourceNodes: GraphNode[], sourceEdges: GraphEdge[]) {
       "charge",
       forceManyBody<GraphNode>()
         .strength((node) =>
-          node.kind === "scanner" ? -1100 : node.kind === "domain" ? -260 : node.kind === "ip" ? -180 : -120
+          node.kind === "scanner" ? -1600 : node.kind === "domain" ? -420 : node.kind === "ip" ? -320 : -220
         )
         .distanceMin(24)
         .distanceMax(720)
@@ -242,15 +253,15 @@ function applyForceLayout(sourceNodes: GraphNode[], sourceEdges: GraphEdge[]) {
     .force(
       "radial",
       forceRadial<GraphNode>(
-        (node) => (node.layer === 0 ? 0 : node.layer === 1 ? 260 : node.layer === 2 ? 470 : 610),
+        (node) => (node.layer === 0 ? 0 : node.layer === 1 ? 390 : node.layer === 2 ? 690 : 940),
         centerX,
         centerY
-      ).strength((node) => (node.layer === 0 ? 1 : 0.045))
+      ).strength((node) => (node.layer === 0 ? 1 : 0.055))
     )
-    .force("center", forceCenter<GraphNode>(centerX, centerY).strength(0.7))
+    .force("center", forceCenter<GraphNode>(centerX, centerY).strength(0.45))
     .stop();
 
-  for (let tick = 0; tick < 320; tick += 1) simulation.tick();
+  for (let tick = 0; tick < 380; tick += 1) simulation.tick();
   simulation.stop();
 
   return nodes;
@@ -269,7 +280,7 @@ function buildGraph(assets: AssetRow[]) {
     sublabel: `${assets.length} asset${assets.length === 1 ? "" : "s"}`,
     x: centerX,
     y: centerY,
-    radius: 18,
+    radius: 14,
     alwaysLabel: true,
     layer: 0,
   });
@@ -290,7 +301,7 @@ function buildGraph(assets: AssetRow[]) {
       sublabel: asset.type === "ip" ? "IP address" : asset.resolvedIp || (asset.isRoot ? "Root domain" : "Discovered asset"),
       x,
       y,
-      radius: asset.isRoot ? 14 : 11,
+      radius: asset.isRoot ? 10 : 7.5,
       assetId: asset.id,
       labelDx: radialX * (asset.isRoot ? 45 : 40),
       labelDy: radialY * 40 + (Math.abs(radialY) < 0.3 ? 5 : 0),
@@ -312,7 +323,7 @@ function buildGraph(assets: AssetRow[]) {
           sublabel: "Resolved IP",
           x: x + radialX * 82,
           y: y + radialY * 82,
-          radius: 10,
+          radius: 7,
           labelDx: radialX * 35,
           labelDy: radialY * 35,
           labelAnchor: radialX > 0.24 ? "start" : radialX < -0.24 ? "end" : "middle",
@@ -333,7 +344,7 @@ function buildGraph(assets: AssetRow[]) {
         sublabel: port.number === 443 ? "TLS" : "Open port",
         x: x + radialX * 128 + tangentX * offset,
         y: y + radialY * 128 + tangentY * offset,
-        radius: 8,
+        radius: 5.5,
         assetId: asset.id,
         labelDx: radialX * 30,
         labelDy: radialY * 30,
@@ -345,7 +356,15 @@ function buildGraph(assets: AssetRow[]) {
   }
 
   const graphEdges = [...edges.values()];
-  return { nodes: applyForceLayout([...nodes.values()], graphEdges), edges: graphEdges };
+  const graphNodes = applyForceLayout([...nodes.values()], graphEdges);
+  const boundsPadding = 100;
+  const bounds: GraphBounds = {
+    left: Math.min(...graphNodes.map((node) => node.x)) - boundsPadding,
+    top: Math.min(...graphNodes.map((node) => node.y)) - boundsPadding,
+    right: Math.max(...graphNodes.map((node) => node.x)) + boundsPadding,
+    bottom: Math.max(...graphNodes.map((node) => node.y)) + boundsPadding,
+  };
+  return { nodes: graphNodes, edges: graphEdges, bounds };
 }
 
 function boxesOverlap(left: ScreenBox, right: ScreenBox, gap = 5) {
@@ -430,6 +449,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
   const portCount = org.assets.reduce((sum, asset) => sum + normalizeAssetOpenPorts(asset.openPorts).length, 0);
   const isDenseGraph = graph.nodes.length > 220;
   const isHugeGraph = graph.nodes.length > 700;
+  const graphFitScale = isDenseGraph ? 0.82 : 0.94;
 
   const worldBounds = useMemo(() => {
     const left = (-viewport.x / viewport.zoom) - 120;
@@ -514,9 +534,10 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
         height: Math.max(360, element.clientHeight),
       };
       setViewportSize(nextSize);
-      if (fittedOrgRef.current !== org.id) {
-        fittedOrgRef.current = org.id;
-        setViewport(getFitViewport(nextSize.width, nextSize.height));
+      const fitKey = `${org.id}:${graph.nodes.length}:${graph.edges.length}`;
+      if (fittedOrgRef.current !== fitKey) {
+        fittedOrgRef.current = fitKey;
+        setViewport(getFitViewport(nextSize.width, nextSize.height, graph.bounds, graphFitScale));
       }
     };
 
@@ -524,7 +545,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
     const observer = new ResizeObserver(updateSize);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [org.id]);
+  }, [graph.bounds, graph.edges.length, graph.nodes.length, graphFitScale, org.id]);
 
   useEffect(() => {
     const element = viewportRef.current;
@@ -533,7 +554,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
       event.stopPropagation();
-      const intensity = event.shiftKey ? 0.2 : 0.12;
+      const intensity = event.shiftKey ? 0.16 : 0.08;
       setViewportZoom(
         viewport.zoom + (event.deltaY > 0 ? -intensity : intensity),
         event.clientX,
@@ -611,7 +632,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
             <div className="flex items-center gap-1 rounded-lg border border-white/65 bg-white/45 p-1 shadow-sm backdrop-blur">
               <button
                 type="button"
-                onClick={() => updateZoom(-0.12)}
+                onClick={() => updateZoom(-0.08)}
                 className="flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-white/75 hover:text-slate-950"
                 aria-label="Zoom out"
               >
@@ -622,7 +643,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
               </span>
               <button
                 type="button"
-                onClick={() => updateZoom(0.12)}
+                onClick={() => updateZoom(0.08)}
                 className="flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-white/75 hover:text-slate-950"
                 aria-label="Zoom in"
               >
@@ -630,7 +651,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
               </button>
               <button
                 type="button"
-                onClick={() => setViewport(getFitViewport(viewportSize.width, viewportSize.height))}
+                onClick={() => setViewport(getFitViewport(viewportSize.width, viewportSize.height, graph.bounds, graphFitScale))}
                 className="flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-white/75 hover:text-slate-950"
                 aria-label="Reset zoom"
               >
@@ -735,7 +756,6 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                   {visibleNodes.map((node) => {
                     const style = nodeStyles[node.kind];
                     const isActive = activeNodeId === node.id;
-                    const isDimmed = Boolean(activeNodeId && !connectedNodeIds.has(node.id));
                     const labelPlacement = labelPlacements.get(node.id);
                     const primaryFontSize = (node.kind === "service" ? 12 : 14) / viewport.zoom;
                     const secondaryFontSize = 11 / viewport.zoom;
@@ -747,7 +767,6 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                         key={node.id}
                         transform={`translate(${node.x},${node.y})`}
                         className="cursor-pointer"
-                        opacity={isDimmed ? 0.28 : 1}
                         onMouseEnter={() => setHoveredNodeId(node.id)}
                         onMouseLeave={() => setHoveredNodeId(null)}
                         onClick={(event) => {
@@ -763,6 +782,7 @@ export default function AssetGraphViewer({ org }: AssetGraphViewerProps) {
                         <circle
                           r={node.radius / viewport.zoom}
                           fill={style.fill}
+                          fillOpacity={1}
                           stroke={style.stroke}
                           strokeWidth={(isActive ? 4 : 2) / viewport.zoom}
                         />
