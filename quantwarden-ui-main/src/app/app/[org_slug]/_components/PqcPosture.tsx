@@ -18,7 +18,7 @@ export default function PqcPosture({ org }: PqcPostureProps) {
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [tierFilter, setTierFilter] = useState("ALL");
-  const [tierSortOrder, setTierSortOrder] = useState<"asc" | "desc" | null>(null);
+  const [scoreSortOrder, setScoreSortOrder] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     const fetchPqcData = async () => {
@@ -105,9 +105,9 @@ export default function PqcPosture({ org }: PqcPostureProps) {
     const matchesTier = tierFilter === "ALL" || a.tier === tierFilter;
     return matchesSearch && matchesTier;
   }).sort((a: any, b: any) => {
-    if (!tierSortOrder) return 0;
-    if (tierSortOrder === "asc") return a.tier.localeCompare(b.tier);
-    return b.tier.localeCompare(a.tier);
+    const scoreDifference = Number(b.averageScore || 0) - Number(a.averageScore || 0);
+    if (scoreDifference !== 0) return scoreSortOrder === "desc" ? scoreDifference : -scoreDifference;
+    return String(a.value).localeCompare(String(b.value));
   });
 
   const tierCounts = organization.tierCounts || {};
@@ -265,25 +265,28 @@ export default function PqcPosture({ org }: PqcPostureProps) {
               <thead className="sticky top-0 z-20">
                 <tr className="border-b border-[#8a5d33]/10 bg-white/45 backdrop-blur-xl">
                   <th className="py-3.5 px-5 text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/70">Asset</th>
-                  <th className="py-3.5 px-5 text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/70 text-center">Score</th>
-                  <th onClick={() => setTierSortOrder(prev => prev === "asc" ? "desc" : prev === "desc" ? null : "asc")} className="py-3.5 px-5 text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/70 cursor-pointer hover:bg-amber-50/50 transition-colors group select-none">
-                    <div className="flex items-center gap-2">
-                      PQC Tier
-                      {tierSortOrder === "asc" ? (
-                        <div className="w-4 h-4 rounded bg-emerald-100 flex items-center justify-center transition-all" title="Ascending (Good to Bad)">
-                          <svg className="w-2.5 h-2.5 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
-                        </div>
-                      ) : tierSortOrder === "desc" ? (
-                        <div className="w-4 h-4 rounded bg-red-100 flex items-center justify-center transition-all" title="Descending (Bad to Good)">
-                          <svg className="w-2.5 h-2.5 text-red-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
-                        </div>
-                      ) : (
-                        <div className="w-4 h-4 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-amber-100" title="Sort by Tier">
-                          <svg className="w-2.5 h-2.5 text-[#8a5d33]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>
-                        </div>
-                      )}
+                  <th
+                    aria-sort={scoreSortOrder === "desc" ? "descending" : "ascending"}
+                    className="cursor-pointer select-none px-5 py-3.5 text-center text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/70 transition-colors hover:bg-amber-50/50"
+                    onClick={() => setScoreSortOrder((current) => current === "desc" ? "asc" : "desc")}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      Score
+                      <span
+                        className="flex h-4 w-4 items-center justify-center rounded bg-emerald-100"
+                        title={scoreSortOrder === "desc" ? "Highest score first" : "Lowest score first"}
+                      >
+                        <svg className="h-2.5 w-2.5 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d={scoreSortOrder === "desc" ? "M19 14l-7 7m0 0l-7-7m7 7V3" : "M5 10l7-7m0 0l7 7m-7-7v18"}
+                          />
+                        </svg>
+                      </span>
                     </div>
                   </th>
+                  <th className="px-5 py-3.5 text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/70">PQC Tier</th>
                   <th className="py-3.5 px-5 text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/70">Key Exchange</th>
                   <th className="py-3.5 px-5 text-[10px] font-black uppercase tracking-[0.15em] text-[#8a5d33]/70">Encryption</th>
                 </tr>
