@@ -144,10 +144,10 @@ export async function GET(req: NextRequest) {
     );
 
     const tlsVersionPosture: Record<string, number> = {
+      "TLS 1.0 / 1.1": 0,
       "TLS 1.2 only": 0,
       "TLS 1.2 + 1.3": 0,
       "TLS 1.3 only": 0,
-      "Legacy / other": 0,
     };
     const tls13CipherNegotiated: Record<string, number> = {};
     const tls13CipherAccepted: Record<string, number> = {};
@@ -344,14 +344,14 @@ export async function GET(req: NextRequest) {
       const hasTls12 = supportedVersions.has("TLS 1.2");
       const hasDeprecatedTls = supportedVersions.has("TLS 1.0") || supportedVersions.has("TLS 1.1");
 
-      if (hasTls13 && !hasTls12 && !hasDeprecatedTls) {
+      if (hasDeprecatedTls) {
+        tlsVersionPosture["TLS 1.0 / 1.1"] += 1;
+      } else if (hasTls13 && !hasTls12) {
         tlsVersionPosture["TLS 1.3 only"] += 1;
       } else if (hasTls13 && hasTls12) {
         tlsVersionPosture["TLS 1.2 + 1.3"] += 1;
-      } else if (hasTls12 && !hasDeprecatedTls) {
+      } else if (hasTls12) {
         tlsVersionPosture["TLS 1.2 only"] += 1;
-      } else {
-        tlsVersionPosture["Legacy / other"] += 1;
       }
       incrementCounter(certificateSignatureAlgorithms, summary.signatureAlgorithm);
       incrementCounter(certificatePorts, `${row.portNumber || 443}`);
@@ -467,9 +467,8 @@ export async function GET(req: NextRequest) {
       portsScored: pqcPortsScored,
     };
 
-    const tlsChartData = ["TLS 1.2 only", "TLS 1.2 + 1.3", "TLS 1.3 only", "Legacy / other"]
-      .map((name) => ({ name, value: tlsVersionPosture[name] || 0 }))
-      .filter((entry) => entry.value > 0 || entry.name !== "Legacy / other");
+    const tlsChartData = ["TLS 1.0 / 1.1", "TLS 1.2 only", "TLS 1.2 + 1.3", "TLS 1.3 only"]
+      .map((name) => ({ name, value: tlsVersionPosture[name] || 0 }));
 
     const topCertificatesByIdentity = Array.from(certificateIdentities.values())
       .map((aggregate) => ({

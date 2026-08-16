@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Calendar,
   ChevronRight,
+  ExternalLink,
   Fingerprint,
   Info,
   KeyRound,
@@ -671,13 +672,13 @@ function OverviewBarChart({
   );
 }
 
-function TlsVersionPostureChart({ data }: { data: CountDatum[] }) {
+function TlsVersionPostureChart({ data, orgSlug }: { data: CountDatum[]; orgSlug: string }) {
   const total = data.reduce((sum, entry) => sum + entry.value, 0);
-  const visualConfig: Record<string, { color: string; label: string }> = {
-    "TLS 1.2 only": { color: "#d97706", label: "Legacy" },
-    "TLS 1.2 + 1.3": { color: "#2563eb", label: "Compatible" },
-    "TLS 1.3 only": { color: "#059669", label: "Preferred" },
-    "Legacy / other": { color: "#dc2626", label: "Action needed" },
+  const visualConfig: Record<string, { color: string; label: string; profile: string }> = {
+    "TLS 1.0 / 1.1": { color: "#171717", label: "Deprecated", profile: "deprecated" },
+    "TLS 1.2 only": { color: "#dc2626", label: "Legacy", profile: "tls12_only" },
+    "TLS 1.2 + 1.3": { color: "#eab308", label: "Compatible", profile: "tls12_and_tls13" },
+    "TLS 1.3 only": { color: "#059669", label: "Preferred", profile: "tls13_only" },
   };
 
   if (total === 0) {
@@ -704,7 +705,9 @@ function TlsVersionPostureChart({ data }: { data: CountDatum[] }) {
       </div>
       <div className="divide-y divide-slate-200 border-y border-slate-200">
         {data.map((entry) => {
-          const config = visualConfig[entry.name] || visualConfig["Legacy / other"];
+          const config = visualConfig[entry.name];
+          if (!config) return null;
+
           return (
             <div key={entry.name} className="flex items-center justify-between gap-4 py-2.5">
               <div className="flex min-w-0 items-center gap-2.5">
@@ -715,6 +718,14 @@ function TlsVersionPostureChart({ data }: { data: CountDatum[] }) {
               <div className="flex shrink-0 items-center gap-3 text-xs">
                 <span className="font-semibold text-slate-900">{entry.value}</span>
                 <span className="w-9 text-right text-slate-500">{formatPercent(entry.value, total)}</span>
+                <Link
+                  href={`/app/${orgSlug}/explore?tlsProfile=${config.profile}`}
+                  aria-label={`Open ${entry.name} endpoints in Explorer`}
+                  title={`Open ${entry.name} endpoints in Explorer`}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition hover:bg-white/80 hover:text-[#8B0000] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8B0000]/40"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
               </div>
             </div>
           );
@@ -885,7 +896,7 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
             <Lock className="h-4 w-4 text-[#8B0000]" />
             <h2 className="text-sm font-semibold text-slate-900">TLS Version Posture</h2>
           </div>
-          <TlsVersionPostureChart data={data.tlsChartData || []} />
+          <TlsVersionPostureChart data={data.tlsChartData || []} orgSlug={org.slug} />
         </article>
 
         <article className="flex h-full flex-col rounded-xl border border-white/60 bg-white/55 p-5 shadow-sm ring-1 ring-[#8a5d33]/10 backdrop-blur-xl">

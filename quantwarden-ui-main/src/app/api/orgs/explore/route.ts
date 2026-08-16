@@ -241,9 +241,18 @@ function scanMatchesFilters(
     ...(summary.supportedTlsVersions || []),
     ...(summary.primaryTlsVersion ? [summary.primaryTlsVersion] : []),
   ]);
-  const hasTls13 = supportedTlsVersions.has("TLSv1.3");
+  const normalizedTlsVersions = new Set(
+    Array.from(supportedTlsVersions).map((version) => version.replace(/^TLSv/i, "TLS "))
+  );
+  const hasTls13 = normalizedTlsVersions.has("TLS 1.3");
+  const hasTls12 = normalizedTlsVersions.has("TLS 1.2");
+  const hasDeprecatedTls = normalizedTlsVersions.has("TLS 1.0") || normalizedTlsVersions.has("TLS 1.1");
   const isLegacyOrMissing = hasNoTls || (!summary.dnsMissing && supportedTlsVersions.size > 0 && !hasTls13);
   if (tlsProfileVal === "legacy_or_missing" && !isLegacyOrMissing) return false;
+  if (tlsProfileVal === "deprecated" && !hasDeprecatedTls) return false;
+  if (tlsProfileVal === "tls12_only" && (!hasTls12 || hasTls13 || hasDeprecatedTls)) return false;
+  if (tlsProfileVal === "tls12_and_tls13" && (!hasTls12 || !hasTls13 || hasDeprecatedTls)) return false;
+  if (tlsProfileVal === "tls13_only" && (!hasTls13 || hasTls12 || hasDeprecatedTls)) return false;
 
   if (selectedKexAlgos.length > 0) {
     const rowAlgos = new Set(summary.keyExchangeAlgorithms || []);
