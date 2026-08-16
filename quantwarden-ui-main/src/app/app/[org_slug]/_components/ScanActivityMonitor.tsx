@@ -580,7 +580,6 @@ function BatchSection({ batch }: { batch: ScanActivityBatch }) {
 }
 
 function HistoryBatchSection({ entry }: { entry: ScanHistoryEntry }) {
-  const sourceMeta = sourceBadgeMeta(entry.source);
   const [activeFilter, setActiveFilter] = useState<ScanHistoryCategory>(() => {
     if (entry.passedAssets > 0) return "passed";
     if (entry.timeoutAssets > 0) return "timeout";
@@ -618,16 +617,8 @@ function HistoryBatchSection({ entry }: { entry: ScanHistoryEntry }) {
   const filters: ScanHistoryCategory[] = ["passed", "timeout", "dnsExpired", "failed"];
 
   return (
-    <section className="rounded-[1.35rem] border border-slate-200/70 bg-white p-5 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-black text-[#3d200a]">Result breakdown</p>
-          <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${sourceMeta.tone}`}>
-            {sourceMeta.label}
-          </span>
-        </div>
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
+    <section className="rounded-xl border border-[#8a5d33]/15 bg-white/70 p-4">
+      <div className="flex flex-wrap gap-2">
         {filters.map((filter) => {
           const meta = historyCategoryMeta(filter);
           const isActive = filter === activeFilter;
@@ -680,7 +671,7 @@ function HistoryBatchSection({ entry }: { entry: ScanHistoryEntry }) {
                       }`}
                     >
                       <td className="px-4 py-3 align-top">
-                        <p className="text-xl font-black leading-snug text-[#3d200a]">{activityItemLabel(item)}</p>
+                        <p className="text-sm font-semibold leading-snug text-[#3d200a]">{activityItemLabel(item)}</p>
                         {item.category === "dnsExpired" && (
                           <p className="mt-1 text-xs font-semibold text-rose-700">
                             This domain no longer resolves in DNS.
@@ -844,19 +835,14 @@ export default function ScanActivityMonitor({
   const [isStarting, setIsStarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [showInfoTooltip, setShowInfoTooltip] = useState(false);
-  const [showLiveActivityInfoTooltip, setShowLiveActivityInfoTooltip] = useState(false);
-  const [showHistoryInfoTooltip, setShowHistoryInfoTooltip] = useState(false);
   const [monitorPanel, setMonitorPanel] = useState<"live" | "queue" | "scheduled" | "history">("live");
   const showHistoryPanel = monitorPanel === "history";
   const [openHistoryBatchId, setOpenHistoryBatchId] = useState<string | null>(null);
   const [cancellingQueueRunId, setCancellingQueueRunId] = useState<string | null>(null);
-  const [isHeaderCompact, setIsHeaderCompact] = useState(false);
-  const [hideHeaderActions, setHideHeaderActions] = useState(false);
   const [isServiceWarningSticky, setIsServiceWarningSticky] = useState(false);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [schedulesLoading, setSchedulesLoading] = useState(false);
   const [deletingScheduleId, setDeletingScheduleId] = useState<string | null>(null);
-  const modalScrollRef = useRef<HTMLDivElement | null>(null);
   const warningProgressBaselineRef = useRef<{ key: string; score: number } | null>(null);
   const {
     activity,
@@ -1011,18 +997,13 @@ export default function ScanActivityMonitor({
             : "Idle";
   const hasActiveSharedScan = Boolean(activeBatches.length) || isPreparingSubdomainDiscovery;
   const liveScanBatch = activeBatch;
-  const shouldShowHistoryPanel = hasActiveSharedScan ? showHistoryPanel : true;
-  const shouldShowLiveScanPanel = hasActiveSharedScan && monitorPanel === "live";
+  const shouldShowHistoryPanel = showHistoryPanel;
+  const shouldShowLiveScanPanel = monitorPanel === "live";
   const shouldShowQueuePanel = monitorPanel === "queue";
   const shouldShowScheduledPanel = monitorPanel === "scheduled";
   const queuedBatchCount = activity?.queuedBatchCount ?? 0;
   const activeScheduleCount = schedules.filter((s: any) => s.enabled).length;
   const historyEntries = activity?.recentHistory || [];
-  const headerActionsHideEnter = 72;
-  const headerActionsHideExit = 26;
-  const headerCompactEnter = 104;
-  const headerCompactExit = 52;
-  const effectiveHeaderCompact = isHeaderCompact || hideHeaderActions;
   const serviceWarningEngine =
     activity?.lock.engine ||
     activeBatch?.engine ||
@@ -1090,32 +1071,9 @@ export default function ScanActivityMonitor({
 
   useEffect(() => {
     if (!isMonitorOpen) {
-      setIsHeaderCompact(false);
-      setHideHeaderActions(false);
       setMonitorPanel("live");
-      return;
     }
-
-    const container = modalScrollRef.current;
-    if (!container) return;
-
-    const onScroll = () => {
-      const scrollTop = container.scrollTop;
-      setHideHeaderActions((prev) =>
-        prev ? scrollTop > headerActionsHideExit : scrollTop > headerActionsHideEnter
-      );
-      setIsHeaderCompact((prev) =>
-        prev ? scrollTop > headerCompactExit : scrollTop > headerCompactEnter
-      );
-    };
-
-    onScroll();
-    container.addEventListener("scroll", onScroll, { passive: true });
-
-    return () => {
-      container.removeEventListener("scroll", onScroll);
-    };
-  }, [headerActionsHideEnter, headerActionsHideExit, headerCompactEnter, headerCompactExit, isMonitorOpen]);
+  }, [isMonitorOpen]);
 
   useEffect(() => {
     if (outageSignalActive || streamOutageLikely) {
@@ -1167,14 +1125,6 @@ export default function ScanActivityMonitor({
       warningProgressBaselineRef.current = null;
     }
   }, [progressMarker, isServiceWarningSticky]);
-
-  useEffect(() => {
-    if (!hasActiveSharedScan) {
-      setMonitorPanel("history");
-      return;
-    }
-    setMonitorPanel("live");
-  }, [hasActiveSharedScan]);
 
   const handleStart = async () => {
     if (!canStart) return;
@@ -1353,260 +1303,107 @@ export default function ScanActivityMonitor({
 
       {isMonitorOpen && (
         <div
-          className="fixed inset-0 z-[80] flex items-start justify-center bg-[#2b1400]/45 px-4 pb-6 pt-[5.75rem] backdrop-blur-sm"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
           onMouseDown={closeMonitor}
         >
           <div
-            className="scan-monitor-shell relative flex h-[calc(100vh-7rem)] w-full max-w-[min(820px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[1.25rem] shadow-[0_28px_80px_rgba(43,20,0,0.36)]"
+            className="scan-monitor-shell relative flex h-[min(86vh,780px)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl shadow-[0_28px_80px_rgba(43,20,0,0.3)]"
             onMouseDown={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-label="Activity Monitor"
           >
-            <div
-              className={`scan-modal-header flex justify-between gap-5 border-b border-white/20 px-6 transition-all duration-300 sm:px-7 ${
-                effectiveHeaderCompact ? "items-center py-2" : "items-start py-5"
-              }`}
-            >
-              <div
-                className={`transition-all duration-300 ${
-                  effectiveHeaderCompact ? "flex min-h-10 items-center" : ""
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <h2 className={`leading-none whitespace-nowrap font-extrabold tracking-tight text-white transition-all duration-300 ${effectiveHeaderCompact ? "text-[1.7rem]" : "text-[2.25rem]"}`}>
-                    Activity Monitor
-                  </h2>
-                  <div className="relative">
-                    <button
-                      type="button"
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-white/12 text-white/90 transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                      aria-label="About Activity Monitor"
-                      aria-expanded={showInfoTooltip}
-                      onMouseEnter={() => setShowInfoTooltip(true)}
-                      onMouseLeave={() => setShowInfoTooltip(false)}
-                      onFocus={() => setShowInfoTooltip(true)}
-                      onBlur={() => setShowInfoTooltip(false)}
-                      onClick={() => setShowInfoTooltip((value) => !value)}
-                    >
-                      <Info className="h-4 w-4" />
-                    </button>
-                    {showInfoTooltip && (
-                      <div className="absolute left-0 top-10 z-20 w-72 rounded-xl border border-white/30 bg-[#5d0000]/94 p-3 text-xs font-medium leading-relaxed text-red-50 shadow-xl backdrop-blur-sm">
-                        <p>Track live subdomain discovery, port discovery, OpenSSL scans, recent runs, and failure diagnostics for this organization.</p>
-                        <p className="mt-1 text-red-100/85">Updates reconnect automatically while scans are in progress.</p>
-                      </div>
-                    )}
-                  </div>
-                  {effectiveHeaderCompact && (
-                    <div className="scan-compact-actions-enter ml-1 flex items-center gap-1.5">
-                      <span
-                        className="qw-tip inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-white/10"
-                        data-tip={streamChip.label}
-                        aria-label={streamChip.label}
-                      >
-                        <span className={`scan-live-dot h-2.5 w-2.5 rounded-full ${streamChip.dot}`} />
-                      </span>
-                      {canStart && (
-                        <button
-                          type="button"
-                          onClick={handleStart}
-                          disabled={syncInFlight}
-                          className="qw-tip inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-white/12 text-white transition hover:bg-white/20"
-                          data-tip="Sync now"
-                          aria-label="Sync now"
-                        >
-                          {syncInFlight ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                        </button>
-                      )}
-                      {canStop && activeBatch && (
-                        <button
-                          type="button"
-                          onClick={handleStop}
-                          className="qw-tip inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200/55 bg-red-500/20 text-red-100 transition hover:bg-red-500/30"
-                          data-tip="Stop scan"
-                          aria-label="Stop scan"
-                        >
-                          {isStopping ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
-                        </button>
-                      )}
-                      {hasActiveSharedScan && (
-                        <button
-                          type="button"
-                          onClick={() => setMonitorPanel("live")}
-                          className={`qw-tip inline-flex h-8 items-center justify-center rounded-full border px-3 text-xs font-bold transition ${
-                            monitorPanel === "live"
-                              ? "border-white bg-white text-[#6b0000]"
-                              : "border-white/30 bg-white/12 text-white hover:bg-white/20"
-                          }`}
-                          data-tip="Live activity"
-                          aria-label="Live activity"
-                        >
-                          Live
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setMonitorPanel("queue")}
-                        className={`qw-tip relative inline-flex h-8 items-center justify-center rounded-full border px-3 text-xs font-bold transition ${
-                          monitorPanel === "queue"
-                            ? "border-white bg-white text-[#6b0000]"
-                            : "border-white/30 bg-white/12 text-white hover:bg-white/20"
-                        }`}
-                        data-tip="Scan queue"
-                        aria-label="Scan queue"
-                      >
-                        Queue
-                        {queuedBatchCount > 0 && (
-                          <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-extrabold text-white">
-                            {queuedBatchCount}
-                          </span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setMonitorPanel("scheduled")}
-                        className={`qw-tip relative inline-flex h-8 items-center justify-center rounded-full border px-3 text-xs font-bold transition ${
-                          monitorPanel === "scheduled"
-                            ? "border-white bg-white text-[#6b0000]"
-                            : "border-white/30 bg-white/12 text-white hover:bg-white/20"
-                        }`}
-                        data-tip="Scheduled scans"
-                        aria-label="Scheduled scans"
-                      >
-                        <CalendarClock className="mr-1 h-3 w-3" />
-                        Scheduled
-                        {activeScheduleCount > 0 && (
-                          <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1.5 text-[10px] font-extrabold text-white">
-                            {activeScheduleCount}
-                          </span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setMonitorPanel("history")}
-                        className={`qw-tip inline-flex h-8 items-center justify-center rounded-full border px-3 text-xs font-bold transition ${
-                          monitorPanel === "history"
-                            ? "border-white bg-white text-[#6b0000]"
-                            : "border-white/30 bg-white/12 text-white hover:bg-white/20"
-                        }`}
-                        data-tip="Scan history"
-                        aria-label="Scan history"
-                      >
-                        <Clock3 className="mr-1 h-3 w-3" />
-                        History
-                      </button>
-                    </div>
-                  )}
+            <div className="flex shrink-0 items-center justify-between border-b border-[#8a5d33]/20 bg-white/75 px-5 py-3 backdrop-blur-xl">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#8B0000] text-white">
+                  <Activity className="h-4.5 w-4.5" />
                 </div>
-                <div
-                  className={`mt-4 flex flex-wrap items-center gap-2.5 transition-all duration-300 ${
-                    effectiveHeaderCompact
-                      ? "invisible max-h-0 overflow-hidden opacity-0 pointer-events-none mt-0"
-                      : "visible max-h-24 opacity-100"
-                  }`}
-                >
-                  <span className="inline-flex items-center gap-2 rounded-full border border-white/28 bg-white/12 px-3 py-1.5 text-xs font-semibold text-white">
-                    <span className={`scan-live-dot h-2 w-2 rounded-full ${streamChip.dot}`} />
-                    {streamChip.label}
-                  </span>
-                  {canStart && (
-                    <button
-                      type="button"
-                      onClick={handleStart}
-                      disabled={syncInFlight}
-                      className="qw-tip inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-white/35 bg-white/14 px-4 py-2 text-base/none font-semibold text-white transition hover:bg-white/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/55"
-                      data-tip="Sync current scan activity"
-                    >
-                      {syncInFlight ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                      Sync now
-                    </button>
-                  )}
-                  {canStop && activeBatch && (
-                    <button
-                      type="button"
-                      onClick={handleStop}
-                      className="qw-tip inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-red-200/60 bg-red-500/20 px-4 py-2 text-base/none font-semibold text-red-100 transition hover:bg-red-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200/70"
-                      data-tip="Stop the active organization scan"
-                    >
-                      {isStopping ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
-                      Stop Scan
-                    </button>
-                  )}
-                  {hasActiveSharedScan && (
-                    <button
-                      type="button"
-                      onClick={() => setMonitorPanel("live")}
-                      className={`qw-tip inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-base/none font-semibold transition focus-visible:outline-none focus-visible:ring-2 ${
-                        monitorPanel === "live"
-                          ? "border-white bg-white text-[#6b0000] hover:bg-red-50 focus-visible:ring-white/70"
-                          : "border-white/35 bg-white/14 text-white hover:bg-white/24 focus-visible:ring-white/55"
-                      }`}
-                      data-tip="Active scan details"
-                    >
-                      Live
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setMonitorPanel("queue")}
-                    className={`qw-tip relative inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-base/none font-semibold transition focus-visible:outline-none focus-visible:ring-2 ${
-                      monitorPanel === "queue"
-                        ? "border-white bg-white text-[#6b0000] hover:bg-red-50 focus-visible:ring-white/70"
-                        : "border-white/35 bg-white/14 text-white hover:bg-white/24 focus-visible:ring-white/55"
-                    }`}
-                    data-tip="View queued and scheduled scans"
-                  >
-                    Queue
-                    {queuedBatchCount > 0 && (
-                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-extrabold text-white">
-                        {queuedBatchCount}
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMonitorPanel("scheduled")}
-                    className={`qw-tip relative inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-base/none font-semibold transition focus-visible:outline-none focus-visible:ring-2 ${
-                      monitorPanel === "scheduled"
-                        ? "border-white bg-white text-[#6b0000] hover:bg-red-50 focus-visible:ring-white/70"
-                        : "border-white/35 bg-white/14 text-white hover:bg-white/24 focus-visible:ring-white/55"
-                    }`}
-                    data-tip="View scheduled scans"
-                  >
-                    <CalendarClock className="h-3.5 w-3.5" />
-                    Scheduled
-                    {activeScheduleCount > 0 && (
-                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1.5 text-[10px] font-extrabold text-white">
-                        {activeScheduleCount}
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMonitorPanel("history")}
-                    className={`qw-tip inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-base/none font-semibold transition focus-visible:outline-none focus-visible:ring-2 ${
-                      monitorPanel === "history"
-                        ? "border-white bg-white text-[#6b0000] hover:bg-red-50 focus-visible:ring-white/70"
-                        : "border-white/35 bg-white/14 text-white hover:bg-white/24 focus-visible:ring-white/55"
-                    }`}
-                    data-tip="Previous scan history"
-                  >
-                    Scan History
-                  </button>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="truncate text-lg font-bold text-[#3d200a]">Activity monitor</h2>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[#8a5d33] transition hover:bg-[#8B0000]/8"
+                        aria-label="About activity monitor"
+                        aria-expanded={showInfoTooltip}
+                        onClick={() => setShowInfoTooltip((value) => !value)}
+                      >
+                        <Info className="h-4 w-4" />
+                      </button>
+                      {showInfoTooltip && (
+                        <div className="absolute left-0 top-8 z-30 w-72 rounded-xl border border-[#8a5d33]/25 bg-white p-3 text-xs font-medium leading-relaxed text-[#5b3a1f] shadow-xl">
+                          Live progress, waiting work, schedules, and recent scan results update automatically.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <p className="truncate text-xs font-medium text-[#8a5d33]/75">{orgSlug}</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={closeMonitor}
-                className="qw-tip inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-white/12 text-white/95 backdrop-blur-md transition-all hover:bg-white/18 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/55"
-                data-tip="Close"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#8a5d33]/20 bg-white/80 text-[#6b0000] transition hover:bg-[#8B0000]/8"
+                aria-label="Close activity monitor"
               >
-                <X className="h-4 w-4" />
+                <X className="h-4.5 w-4.5" />
               </button>
             </div>
 
-            <div ref={modalScrollRef} className="flex-1 overflow-y-auto px-6 py-6 sm:px-7">
+            <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-[#8a5d33]/20 bg-[#fff8e8]/90 px-4 py-2.5 sm:px-5">
+              {([
+                { id: "live" as const, label: "Live", count: activeBatches.length },
+                { id: "queue" as const, label: "Waiting", count: queuedBatchCount },
+                { id: "scheduled" as const, label: "Scheduled", count: activeScheduleCount },
+                { id: "history" as const, label: "History", count: historyEntries.length },
+              ]).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setMonitorPanel(item.id)}
+                  className={`inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition ${
+                    monitorPanel === item.id
+                      ? "bg-[#8B0000] text-white shadow-sm"
+                      : "text-[#5b3a1f] hover:bg-white/80"
+                  }`}
+                >
+                  {item.id === "live" && (
+                    <span className={`h-2 w-2 rounded-full ${streamChip.dot}`} />
+                  )}
+                  {item.label}
+                  <span className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                    monitorPanel === item.id ? "bg-white/18 text-white" : "bg-[#8B0000]/8 text-[#6b0000]"
+                  }`}>
+                    {item.count}
+                  </span>
+                </button>
+              ))}
+              <div className="ml-auto flex items-center gap-2 pl-2">
+                {canStop && activeBatch && (
+                  <button
+                    type="button"
+                    onClick={handleStop}
+                    disabled={isStopping}
+                    className="inline-flex h-9 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+                  >
+                    {isStopping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
+                    Stop
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void refreshActivity()}
+                  disabled={syncInFlight || loading}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#8a5d33]/20 bg-white/85 px-3 text-sm font-semibold text-[#6b0000] transition hover:bg-white disabled:opacity-60"
+                >
+                  {syncInFlight ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
               {showServiceUnavailableWarning && (
                 <div className="mb-4 rounded-[1.05rem] border border-red-300 bg-red-600 px-4 py-3 text-white shadow-[0_8px_28px_rgba(127,29,29,0.35)]">
                   <div className="flex items-start gap-2.5">
@@ -1635,72 +1432,21 @@ export default function ScanActivityMonitor({
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {modalStreamStatus !== "connected" && modalStreamStatus !== "connecting" && (
-                    <div className="rounded-[1.35rem] border border-slate-200/85 bg-white/45 p-5 backdrop-blur-md">
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-xs font-semibold text-[#8a5d33]/55">Live activity</p>
-                            <div className="relative">
-                              <button
-                                type="button"
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#8a5d33]/25 bg-white/70 text-[#6b0000] transition hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8a5d33]/35"
-                                aria-label="About Live Activity"
-                                aria-expanded={showLiveActivityInfoTooltip}
-                                onMouseEnter={() => setShowLiveActivityInfoTooltip(true)}
-                                onMouseLeave={() => setShowLiveActivityInfoTooltip(false)}
-                                onFocus={() => setShowLiveActivityInfoTooltip(true)}
-                                onBlur={() => setShowLiveActivityInfoTooltip(false)}
-                                onClick={() => setShowLiveActivityInfoTooltip((value) => !value)}
-                              >
-                                <Info className="h-3.5 w-3.5" />
-                              </button>
-                              {showLiveActivityInfoTooltip && (
-                                <div className="absolute left-0 top-8 z-20 w-96 max-w-[min(92vw,24rem)] rounded-xl border border-[#8a5d33]/28 bg-white/95 p-3 text-xs font-medium leading-relaxed text-[#5b3a1f] shadow-xl backdrop-blur-sm">
-                                  <p>
-                                    Activity Monitor connects you to the live organization scan activity stream, including work started manually or by the background scheduler.
-                                  </p>
-                                  <p className="mt-1">
-                                    When you press Sync, you subscribe to the live SSE activity feed. If no scan is currently running, the monitor simply stays idle until new work appears.
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <p className="mt-1.5 text-[1.15rem] leading-snug font-bold text-[#3d200a]">
-                            {modalStreamStatus === "error"
-                              ? "Connection interrupted. Reconnecting automatically..."
-                              : !hasActiveSharedScan
-                                ? "No active scan detected."
-                              : "Live updates are paused until you press Start."}
-                          </p>
-                          <p className="mt-1.5 text-[1.02rem] leading-relaxed font-medium text-[#8a5d33]/80">
-                            {modalStreamStatus === "error"
-                              ? "If a scan is still running, this monitor will reconnect and resume live updates. If it completed, this panel will switch back to idle."
-                              : !hasActiveSharedScan
-                                ? "Press Sync now to refresh activity."
-                              : "This checks for active shared scan work and only opens SSE when there is work in progress."}
-                          </p>
-                          <p className="mt-1 text-xs font-semibold text-[#6b0000]">{lastSyncText}</p>
-                          {error && (
-                            <p className="mt-2 text-sm font-semibold text-red-700">{error}</p>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleStart}
-                          disabled={!canStart || syncInFlight}
-                          className="qw-tip inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[#8B0000] px-6 py-3 text-base/none font-semibold text-white transition hover:bg-[#6d0000] disabled:cursor-not-allowed disabled:bg-[#8B0000]/50"
-                          data-tip="Sync current scan activity"
-                        >
-                          {syncInFlight ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                          Sync now
-                        </button>
+                  {shouldShowLiveScanPanel && modalStreamStatus !== "connected" && modalStreamStatus !== "connecting" && (
+                    <div className="flex items-center gap-3 rounded-xl border border-[#8a5d33]/20 bg-white/65 px-4 py-3 backdrop-blur-md">
+                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${streamChip.dot}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-[#3d200a]">
+                          {modalStreamStatus === "error" ? "Connection interrupted" : "No active scan"}
+                        </p>
+                        <p className="truncate text-xs font-medium text-[#8a5d33]/75">
+                          {error || `${lastSyncText} Activity refreshes automatically.`}
+                        </p>
                       </div>
                     </div>
                   )}
 
-                  {activity.lock.active && (
+                  {shouldShowLiveScanPanel && activity.lock.active && (
                     <div className="rounded-[1.75rem] border border-amber-300 bg-amber-50/90 p-5">
                       <div className="flex items-start gap-3">
                         <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
@@ -1724,12 +1470,14 @@ export default function ScanActivityMonitor({
                     </div>
                   )}
 
-                  <UpcomingQueueSection
-                    entries={upcomingQueue}
-                    canScan={canScan}
-                    cancellingRunId={cancellingQueueRunId}
-                    onCancel={handleCancelQueuedRun}
-                  />
+                  {shouldShowQueuePanel && (
+                    <UpcomingQueueSection
+                      entries={upcomingQueue}
+                      canScan={canScan}
+                      cancellingRunId={cancellingQueueRunId}
+                      onCancel={handleCancelQueuedRun}
+                    />
+                  )}
 
                   {shouldShowQueuePanel && (
                     <section className="space-y-4">
@@ -1940,17 +1688,7 @@ export default function ScanActivityMonitor({
                     <SubdomainDiscoveryWorkflowSection workflow={activeSubdomainWorkflow} />
                   )}
 
-                  {!latestBatch && historyEntries.length === 0 && !shouldShowLiveScanPanel && (
-                    <div className="flex min-h-[240px] flex-col items-center justify-center rounded-[1.75rem] border border-dashed border-amber-500/20 bg-white/50 p-10 text-center">
-                      <Clock3 className="h-10 w-10 text-[#8a5d33]/25" />
-                      <h3 className="mt-4 text-xl font-black text-[#3d200a]">No scan batches yet</h3>
-                      <p className="mt-2 max-w-md text-sm font-semibold text-[#8a5d33]/70">
-                        Once someone in this organization starts a scan or port-discovery run, it will appear here with shared progress.
-                      </p>
-                    </div>
-                  )}
-
-                  {activeSingles.length > 1 && (
+                  {shouldShowLiveScanPanel && activeSingles.length > 1 && (
                     <section className="rounded-[1.75rem] border border-amber-500/10 bg-white/60 p-5">
                       <div className="flex items-center gap-2">
                         <Activity className="h-4.5 w-4.5 text-[#8B0000]" />
@@ -1983,41 +1721,15 @@ export default function ScanActivityMonitor({
                   )}
 
                   {shouldShowHistoryPanel && historyEntries.length > 0 && (
-                    <section className="rounded-[1.35rem] p-5">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-[2rem] leading-none font-extrabold tracking-tight text-[#3d200a]">Scan History</h3>
-                          <div className="relative">
-                            <button
-                              type="button"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#8a5d33]/25 bg-white/60 text-[#6b0000] transition hover:bg-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8a5d33]/35"
-                              aria-label="About Scan History"
-                              aria-expanded={showHistoryInfoTooltip}
-                              onMouseEnter={() => setShowHistoryInfoTooltip(true)}
-                              onMouseLeave={() => setShowHistoryInfoTooltip(false)}
-                              onFocus={() => setShowHistoryInfoTooltip(true)}
-                              onBlur={() => setShowHistoryInfoTooltip(false)}
-                              onClick={() => setShowHistoryInfoTooltip((value) => !value)}
-                            >
-                              <Info className="h-4 w-4" />
-                            </button>
-                            {showHistoryInfoTooltip && (
-                              <div className="absolute left-0 top-10 z-20 w-80 rounded-xl border border-[#8a5d33]/28 bg-white/95 p-3 text-xs font-medium leading-relaxed text-[#5b3a1f] shadow-xl backdrop-blur-sm">
-                                <p>Shows recent single, group, and full scan batches with timing and categorized asset outcomes.</p>
-                                <p className="mt-1">Open any entry to inspect the passed, timeout, DNS expired, and failed assets from that run.</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="mt-4 space-y-3">
+                    <section className="space-y-3">
+                      <div className="space-y-3">
                         {historyEntries.map((entry) => {
                           const isOpen = openHistoryBatchId === entry.batchId;
 
                           return (
                           <div
                             key={entry.batchId}
-                            className={`scan-history-accordion group rounded-2xl bg-white ${
+                            className={`scan-history-accordion group rounded-xl border border-[#8a5d33]/18 bg-white/75 ${
                               isOpen ? "is-open" : ""
                             }`}
                           >
@@ -2038,18 +1750,12 @@ export default function ScanActivityMonitor({
                                   {formatWhen(entry.completedAt || entry.createdAt)}
                                 </p>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                                  Passed: {entry.passedAssets}
+                              <div className="flex shrink-0 items-center gap-2">
+                                <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 sm:inline-flex">
+                                  {formatDuration(entry.durationSeconds)}
                                 </span>
-                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                                  Timeout: {entry.timeoutAssets}
-                                </span>
-                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                                  DNS Expired: {entry.dnsExpiredAssets}
-                                </span>
-                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                                  Failed: {entry.failedAssets}
+                                <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 sm:inline-flex">
+                                  {entry.totalAssets} targets
                                 </span>
                                 <span className={`scan-history-chevron inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#8a5d33] transition-transform duration-200 ${
                                   isOpen ? "rotate-180" : ""
@@ -2060,28 +1766,6 @@ export default function ScanActivityMonitor({
                             </button>
                             <div className="scan-history-expand">
                               <div className="scan-history-main">
-                                <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
-                                  <div className="rounded-xl border border-amber-500/10 bg-white px-3 py-2">
-                                    <p className="text-[10px] font-extrabold uppercase tracking-wide text-[#6b0000]">Time</p>
-                                    <p className="mt-1 text-sm font-black text-[#3d200a]">{formatDuration(entry.durationSeconds)}</p>
-                                  </div>
-                                  <div className="rounded-xl border border-amber-500/10 bg-white px-3 py-2">
-                                    <p className="text-[10px] font-extrabold uppercase tracking-wide text-[#6b0000]">Passed</p>
-                                    <p className="mt-1 text-sm font-black text-emerald-700">{entry.passedAssets}</p>
-                                  </div>
-                                  <div className="rounded-xl border border-amber-500/10 bg-white px-3 py-2">
-                                    <p className="text-[10px] font-extrabold uppercase tracking-wide text-[#6b0000]">Timeout</p>
-                                    <p className="mt-1 text-sm font-black text-amber-700">{entry.timeoutAssets}</p>
-                                  </div>
-                                  <div className="rounded-xl border border-amber-500/10 bg-white px-3 py-2">
-                                    <p className="text-[10px] font-extrabold uppercase tracking-wide text-[#6b0000]">DNS Expired</p>
-                                    <p className="mt-1 text-sm font-black text-rose-700">{entry.dnsExpiredAssets}</p>
-                                  </div>
-                                  <div className="rounded-xl border border-amber-500/10 bg-white px-3 py-2">
-                                    <p className="text-[10px] font-extrabold uppercase tracking-wide text-[#6b0000]">Failed</p>
-                                    <p className="mt-1 text-sm font-black text-red-700">{entry.failedAssets}</p>
-                                  </div>
-                                </div>
                                 <HistoryBatchSection entry={entry} />
                               </div>
                             </div>
@@ -2089,6 +1773,14 @@ export default function ScanActivityMonitor({
                         );})}
                       </div>
                     </section>
+                  )}
+
+                  {shouldShowHistoryPanel && historyEntries.length === 0 && (
+                    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-[#8a5d33]/20 bg-white/45 p-8 text-center">
+                      <Clock3 className="h-8 w-8 text-[#8a5d33]/30" />
+                      <p className="mt-3 text-base font-semibold text-[#3d200a]">No scan history yet</p>
+                      <p className="mt-1 text-sm text-[#8a5d33]/70">Completed scans will appear here.</p>
+                    </div>
                   )}
                 </div>
               )}
@@ -2098,22 +1790,8 @@ export default function ScanActivityMonitor({
       )}
       <style jsx global>{`
         .scan-monitor-shell {
-          border: 1px solid rgba(156, 197, 255, 0.55);
-          background-color: rgba(242, 248, 255, 0.95);
-          background-image:
-            radial-gradient(circle at 1px 1px, rgba(90, 0, 24, 0.42) 1.1px, transparent 1.2px),
-            linear-gradient(180deg, rgba(245, 250, 255, 0.97), rgba(252, 254, 255, 0.93));
-          background-size: 16px 16px, 100% 100%;
-          background-position: 0 0, 0 0;
-        }
-
-        .scan-modal-header {
-          background-color: #8b0000;
-          background-image:
-            linear-gradient(rgba(255, 255, 255, 0.11) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.11) 1px, transparent 1px),
-            linear-gradient(180deg, rgba(165, 0, 0, 0) 0%, rgba(80, 0, 0, 0.42) 100%);
-          background-size: 30px 30px, 30px 30px, 100% 100%;
+          border: 1px solid rgba(138, 93, 51, 0.28);
+          background: linear-gradient(145deg, rgba(255, 250, 239, 0.98), rgba(255, 239, 204, 0.96));
         }
 
         .qw-tip {
@@ -2268,23 +1946,18 @@ export default function ScanActivityMonitor({
         }
 
         .scan-history-accordion.is-open {
-          background-color: #0f2748;
-          background-image:
-            linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
-            linear-gradient(180deg, rgba(28, 68, 122, 0) 0%, rgba(8, 22, 45, 0.42) 100%);
-          background-size: 26px 26px, 26px 26px, 100% 100%;
-          border-color: rgba(191, 219, 254, 0.45);
+          background: rgba(255, 253, 249, 0.94);
+          border-color: rgba(139, 0, 0, 0.24);
         }
 
         .scan-history-accordion.is-open .scan-history-chevron {
-          color: rgba(255, 244, 244, 0.95);
-          background: rgba(255, 255, 255, 0.16);
+          color: #6b0000;
+          background: rgba(139, 0, 0, 0.07);
         }
 
         .scan-history-accordion.is-open .scan-history-title,
         .scan-history-accordion.is-open .scan-history-meta {
-          color: #fff2f2;
+          color: #3d200a;
         }
 
         .scan-history-accordion.is-open .scan-history-status-badge {

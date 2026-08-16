@@ -26,6 +26,8 @@ const STREAM_NO_ACTIVE_GRACE_CHECKS = 2;
 const LAST_SYNC_STORAGE_PREFIX = "scan-activity-last-sync:";
 const SCAN_REQUEST_TIMEOUT_MS = 20000;
 const WORKFLOW_POLL_INTERVAL_MS = 5000;
+const ACTIVITY_REQUEST_TIMEOUT_MS = 8000;
+const ACTIVITY_POLL_INTERVAL_MS = 15000;
 
 interface CreateBatchInput {
   orgId: string;
@@ -166,6 +168,7 @@ export function ScanActivityProvider({ children }: { children: ReactNode }) {
   const workflowSeenRef = useRef<Set<string>>(new Set());
   // Poller interval IDs per org
   const workflowPollersRef = useRef<Map<string, number>>(new Map());
+  const activityPollersRef = useRef<Map<string, number>>(new Map());
 
   const setOrgState = useCallback((orgId: string, nextState: OrgActivityState) => {
     setOrgStates((previous) => {
@@ -272,9 +275,12 @@ export function ScanActivityProvider({ children }: { children: ReactNode }) {
     setOrgState(orgId, { ...previous, loading: previous.data ? false : true, error: null });
 
     const refreshPromise = (async (): Promise<OrgScanActivityPayload | null> => {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), ACTIVITY_REQUEST_TIMEOUT_MS);
       try {
         const response = await fetch(`/api/orgs/scans/activity?orgId=${encodeURIComponent(orgId)}`, {
           cache: "no-store",
+          signal: controller.signal,
         });
         const data = await response.json().catch(() => null);
 
@@ -295,13 +301,17 @@ export function ScanActivityProvider({ children }: { children: ReactNode }) {
 
         return data;
       } catch (error: any) {
+        const latest = orgStatesRef.current[orgId] || defaultOrgState;
         setOrgState(orgId, {
-          ...previous,
+          ...latest,
           loading: false,
-          error: error?.message || "Failed to fetch scan activity.",
+          error: error?.name === "AbortError"
+            ? "Activity refresh timed out. Retrying automatically."
+            : (error?.message || "Failed to fetch scan activity."),
         });
         return null;
       } finally {
+        window.clearTimeout(timeoutId);
         refreshPromisesRef.current.delete(orgId);
       }
     })();
@@ -836,6 +846,17 @@ export function ScanActivityProvider({ children }: { children: ReactNode }) {
       void pollWorkflowStatus();
       const pollerId = window.setInterval(() => { void pollWorkflowStatus(); }, WORKFLOW_POLL_INTERVAL_MS);
       workflowPollersRef.current.set(options.orgId, pollerId);
+
+      const pollActivity = async () => {
+        if (!subscriptionsRef.current.has(options.orgId)) return;
+        const activity = await refreshOrgActivity(options.orgId);
+        if (!activity?.activeBatches.length) return;
+        const latestState = orgStatesRef.current[options.orgId] || defaultOrgState;
+        const nextIntent = latestState.streamIntent === "off" ? "batch-driven" : latestState.streamIntent;
+        void ensureOrgStream(options.orgId, nextIntent, activity);
+      };
+      const activityPollerId = window.setInterval(() => { void pollActivity(); }, ACTIVITY_POLL_INTERVAL_MS);
+      activityPollersRef.current.set(options.orgId, activityPollerId);
     }
   }, [ensureOrgStream, refreshOrgActivity, setCheckingConnection, setOrgState, stopOrgStreaming]);
 
@@ -856,6 +877,11 @@ export function ScanActivityProvider({ children }: { children: ReactNode }) {
       if (pollerId) {
         window.clearInterval(pollerId);
         workflowPollersRef.current.delete(orgId);
+      }
+      const activityPollerId = activityPollersRef.current.get(orgId);
+      if (activityPollerId) {
+        window.clearInterval(activityPollerId);
+        activityPollersRef.current.delete(orgId);
       }
       return;
     }
@@ -1067,7 +1093,13 @@ export function ScanActivityProvider({ children }: { children: ReactNode }) {
 
   const openMonitor = useCallback((orgId: string) => {
     setMonitorOrgId(orgId);
-  }, []);
+    void refreshOrgActivity(orgId).then((activity) => {
+      if (!activity?.activeBatches.length) return;
+      const latestState = orgStatesRef.current[orgId] || defaultOrgState;
+      const nextIntent = latestState.streamIntent === "off" ? "batch-driven" : latestState.streamIntent;
+      void ensureOrgStream(orgId, nextIntent, activity);
+    });
+  }, [ensureOrgStream, refreshOrgActivity]);
 
   const closeMonitor = useCallback(() => {
     setMonitorOrgId(null);
