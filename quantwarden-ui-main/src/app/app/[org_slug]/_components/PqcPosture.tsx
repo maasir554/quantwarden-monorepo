@@ -6,6 +6,7 @@ import { ShieldCheck, Info, Loader2, AlertTriangle, Search, Server, Telescope } 
 import { PqcMethodologyModal } from "./PqcMethodologyModal";
 import { FirstScanAnalysisNotice } from "./OnboardingScanStatus";
 import { PqcScoreMeter } from "./PqcScoreMeter";
+import { EmptyRootDomainState } from "./EmptyRootDomainState";
 
 interface PqcPostureProps {
   org: any;
@@ -73,6 +74,33 @@ export default function PqcPosture({ org }: PqcPostureProps) {
   }
 
   const { organization, assets } = data;
+  if (data.rootDomainCount === 0) {
+    return (
+      <div className="w-full space-y-5">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-[#3d200a] flex items-center gap-2">
+              <ShieldCheck className="h-6 w-6 text-[#8B0000]" />
+              Post-Quantum Cryptography (PQC) Posture
+            </h1>
+            <p className="text-[#8a5d33]/70 mt-1 text-xs font-semibold">
+              Assess your organization's readiness against quantum-era threats.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowInfoModal(true)}
+            className="flex items-center gap-2 rounded-lg border border-white/60 bg-white/55 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur-xl transition hover:border-[#8B0000]/30 hover:bg-white/70 hover:text-[#8B0000]"
+          >
+            <Info className="h-3.5 w-3.5" />
+            Scoring Methodology
+          </button>
+        </div>
+        <EmptyRootDomainState orgId={org.id} area="pqc" />
+        <PqcMethodologyModal isOpen={showInfoModal} onClose={() => setShowInfoModal(false)} />
+      </div>
+    );
+  }
+
   if (organization.totalPortsScored === 0 || data.initialScanPending) {
     return (
       <div className="w-full space-y-5">

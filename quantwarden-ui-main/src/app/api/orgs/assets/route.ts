@@ -6,6 +6,7 @@ import { normalizeAssetOpenPorts } from "@/lib/port-discovery";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
 import { writeOrganizationAuditLog } from "@/lib/audit-log";
+import { enqueueOnboardingWorkflow } from "@/lib/scan-workflow";
 
 export async function GET(req: NextRequest) {
   try {
@@ -74,15 +75,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { orgId, value, type, isRoot, parentId, openPorts, bucket, buckets } = await req.json();
+    const { orgId, value, type, isRoot, parentId, openPorts, bucket, buckets, startDefaultWorkflow } = await req.json();
 
     if (!orgId || !value) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
+    if (startDefaultWorkflow === true && (type !== "domain" || isRoot !== true)) {
+      return NextResponse.json({ error: "The default onboarding pipeline requires a root domain." }, { status: 400 });
+    }
+
     const access = await getOrgMemberAccess(orgId, session.user.id);
     if (!access?.canManageAssets) {
       return NextResponse.json({ error: "Forbidden: You do not have asset management permission." }, { status: 403 });
+    }
+
+    if (startDefaultWorkflow === true) {
+      const existingRootDomains = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id
+           FROM "asset"
+          WHERE "organizationId" = $1
+            AND "isRoot" = true
+            AND type = 'domain'
+          LIMIT 1`,
+        orgId
+      );
+      if (existingRootDomains.length > 0) {
+        return NextResponse.json({ error: "A root domain has already been added." }, { status: 409 });
+      }
     }
 
     const assetId = crypto.randomUUID();
@@ -119,6 +139,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (startDefaultWorkflow === true) {
+      try {
+        await enqueueOnboardingWorkflow(orgId, assetId, session.user.id);
+      } catch (workflowError) {
+        await prisma.$executeRawUnsafe(
+          `DELETE FROM "asset" WHERE id = $1 AND "organizationId" = $2`,
+          assetId,
+          orgId
+        ).catch(() => undefined);
+        throw workflowError;
+      }
+    }
+
     await writeOrganizationAuditLog({
       category: "organization",
       action: "asset.created",
@@ -128,7 +161,11 @@ export async function POST(req: NextRequest) {
       organizationId: orgId,
       targetType: "asset",
       targetId: assetId,
-      metadata: { assetType: type || "domain", isRoot: Boolean(isRoot) },
+      metadata: {
+        assetType: type || "domain",
+        isRoot: Boolean(isRoot),
+        defaultWorkflowStarted: startDefaultWorkflow === true,
+      },
       request: req,
     });
 

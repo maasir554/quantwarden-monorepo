@@ -29,6 +29,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    const rootDomainRows = await prisma.$queryRawUnsafe<Array<{ count: number }>>(
+      `SELECT COUNT(*)::int as count
+         FROM "asset"
+        WHERE "organizationId" = $1
+          AND "isRoot" = true
+          AND type = 'domain'`,
+      orgId
+    );
+    const rootDomainCount = rootDomainRows[0]?.count || 0;
+
     let initialScanPending = false;
     try {
       const workflowRows = await prisma.$queryRawUnsafe<Array<{ pending: boolean }>>(
@@ -123,6 +133,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
+      rootDomainCount,
       initialScanPending,
       organization: {
         averageScore: orgAvgScore,

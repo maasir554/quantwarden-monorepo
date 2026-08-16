@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { FirstScanAnalysisNotice } from "./OnboardingScanStatus";
+import { EmptyRootDomainState } from "./EmptyRootDomainState";
 import { PqcScoreMeter } from "./PqcScoreMeter";
 
 interface OrgOverviewProps {
@@ -853,6 +854,20 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
   }
 
   if (!data) return null;
+
+  if (data.discovery?.domains === 0) {
+    return (
+      <div className="flex flex-col space-y-5 pb-10 animate-in fade-in duration-300">
+        <header>
+          <h1 className="text-2xl font-bold tracking-tight text-[#3d200a]">Security Overview</h1>
+          <p className="mt-1 text-sm font-semibold text-[#8a5d33]/70">
+            Real-time intelligence from completed discovery and OpenSSL endpoint scans.
+          </p>
+        </header>
+        <EmptyRootDomainState orgId={org.id} area="overview" />
+      </div>
+    );
+  }
 
   if (data.totalScanned === 0 || data.initialScanPending) {
     return (
