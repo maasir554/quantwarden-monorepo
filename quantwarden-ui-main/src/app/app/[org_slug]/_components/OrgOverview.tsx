@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Calendar,
   ChevronRight,
+  Download,
   ExternalLink,
   Fingerprint,
   Info,
@@ -36,6 +37,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { DEFAULT_REPORT_SECTIONS } from "@/lib/reporting";
 import { FirstScanAnalysisNotice } from "./OnboardingScanStatus";
 import { EmptyRootDomainState } from "./EmptyRootDomainState";
 import { PqcScoreMeter } from "./PqcScoreMeter";
@@ -800,6 +802,8 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
   const [tls12CipherTab, setTls12CipherTab] = useState<"negotiated" | "accepted">("accepted");
   const [kyberTab, setKyberTab] = useState<"supported" | "negotiated">("supported");
   const [immediateAttentionTab, setImmediateAttentionTab] = useState<"dns" | "cert" | "tls">("dns");
+  const [reportGenerating, setReportGenerating] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -823,6 +827,47 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
       mounted = false;
     };
   }, [org.id]);
+
+  const downloadReport = async () => {
+    if (reportGenerating) return;
+    setReportGenerating(true);
+    setReportError(null);
+
+    try {
+      const response = await fetch("/api/orgs/reporting", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orgId: org.id,
+          heading: `${org.name} Security Posture Report`,
+          subtitle: "TLS and post-quantum readiness assessment",
+          sections: DEFAULT_REPORT_SECTIONS,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "The server could not generate the report.");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const disposition = response.headers.get("Content-Disposition");
+      const filename = disposition?.match(/filename="?([^";]+)"?/i)?.[1]
+        || `${org.slug}-security-posture.pdf`;
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      setReportError(downloadError instanceof Error ? downloadError.message : "The server could not generate the report.");
+    } finally {
+      setReportGenerating(false);
+    }
+  };
 
   const immediateAttentionGroups = {
     dns: data?.immediateAttention?.dnsExpired || [],
@@ -898,11 +943,32 @@ export default function OrgOverview({ org, isAdmin }: OrgOverviewProps) {
   return (
     <TooltipProvider>
       <div className="flex flex-col space-y-5 pb-10 animate-in fade-in duration-300">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight text-[#3d200a]">Security Overview</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Real-time intelligence from the latest OpenSSL endpoint scans across your organization.
-        </p>
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-[#3d200a]">Security Overview</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Real-time intelligence from the latest OpenSSL endpoint scans across your organization.
+          </p>
+          {reportError ? <p className="mt-2 text-xs font-medium text-red-700">{reportError}</p> : null}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={downloadReport}
+            disabled={reportGenerating}
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#8a5d33]/30 bg-white/60 px-3.5 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur transition hover:border-[#8B0000]/30 hover:bg-white/80 hover:text-[#8B0000] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {reportGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {reportGenerating ? "Generating report" : "Download report"}
+          </button>
+          <Link
+            href={`/app/${org.slug}/explore`}
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#8B0000] px-3.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#700000]"
+          >
+            <Telescope className="h-4 w-4" />
+            Full details
+          </Link>
+        </div>
       </header>
 
       <section className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-3">
