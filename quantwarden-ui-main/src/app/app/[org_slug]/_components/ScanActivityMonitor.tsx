@@ -834,7 +834,6 @@ export default function ScanActivityMonitor({
 }) {
   const [isStarting, setIsStarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
-  const [showInfoTooltip, setShowInfoTooltip] = useState(false);
   const [monitorPanel, setMonitorPanel] = useState<"live" | "queue" | "scheduled" | "history">("live");
   const showHistoryPanel = monitorPanel === "history";
   const [openHistoryBatchId, setOpenHistoryBatchId] = useState<string | null>(null);
@@ -1303,11 +1302,11 @@ export default function ScanActivityMonitor({
 
       {isMonitorOpen && (
         <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[80] flex items-start justify-center bg-slate-950/45 px-4 pb-4 pt-[6.75rem] backdrop-blur-sm"
           onMouseDown={closeMonitor}
         >
           <div
-            className="scan-monitor-shell relative flex h-[min(86vh,780px)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl shadow-[0_28px_80px_rgba(43,20,0,0.3)]"
+            className="scan-monitor-shell relative flex h-[calc(100vh-8rem)] max-h-[780px] w-full max-w-5xl flex-col overflow-hidden rounded-2xl shadow-[0_28px_80px_rgba(43,20,0,0.3)]"
             onMouseDown={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -1321,21 +1320,16 @@ export default function ScanActivityMonitor({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h2 className="truncate text-lg font-bold text-[#3d200a]">Activity monitor</h2>
-                    <div className="relative">
-                      <button
-                        type="button"
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[#8a5d33] transition hover:bg-[#8B0000]/8"
+                    <div className="group relative">
+                      <span
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[#8a5d33] transition group-hover:bg-[#8B0000]/8"
                         aria-label="About activity monitor"
-                        aria-expanded={showInfoTooltip}
-                        onClick={() => setShowInfoTooltip((value) => !value)}
                       >
                         <Info className="h-4 w-4" />
-                      </button>
-                      {showInfoTooltip && (
-                        <div className="absolute left-0 top-8 z-30 w-72 rounded-xl border border-[#8a5d33]/25 bg-white p-3 text-xs font-medium leading-relaxed text-[#5b3a1f] shadow-xl">
-                          Live progress, waiting work, schedules, and recent scan results update automatically.
-                        </div>
-                      )}
+                      </span>
+                      <div className="pointer-events-none absolute left-0 top-8 z-30 hidden w-72 rounded-xl border border-[#8a5d33]/25 bg-white p-3 text-xs font-medium leading-relaxed text-[#5b3a1f] shadow-xl group-hover:block">
+                        Live progress, waiting work, schedules, and recent scan results update automatically.
+                      </div>
                     </div>
                   </div>
                   <p className="truncate text-xs font-medium text-[#8a5d33]/75">{orgSlug}</p>
@@ -1344,7 +1338,7 @@ export default function ScanActivityMonitor({
               <button
                 type="button"
                 onClick={closeMonitor}
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#8a5d33]/20 bg-white/80 text-[#6b0000] transition hover:bg-[#8B0000]/8"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#8a5d33]/20 bg-white/80 text-[#6b0000] transition hover:bg-[#8B0000]/8"
                 aria-label="Close activity monitor"
               >
                 <X className="h-4.5 w-4.5" />
@@ -1362,7 +1356,7 @@ export default function ScanActivityMonitor({
                   key={item.id}
                   type="button"
                   onClick={() => setMonitorPanel(item.id)}
-                  className={`inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition ${
+                  className={`inline-flex h-9 items-center gap-2 rounded-full px-3 text-sm font-semibold transition ${
                     monitorPanel === item.id
                       ? "bg-[#8B0000] text-white shadow-sm"
                       : "text-[#5b3a1f] hover:bg-white/80"
@@ -1791,7 +1785,11 @@ export default function ScanActivityMonitor({
       <style jsx global>{`
         .scan-monitor-shell {
           border: 1px solid rgba(138, 93, 51, 0.28);
-          background: linear-gradient(145deg, rgba(255, 250, 239, 0.98), rgba(255, 239, 204, 0.96));
+          background-color: rgba(255, 247, 228, 0.98);
+          background-image:
+            radial-gradient(circle at 1px 1px, rgba(108, 0, 0, 0.19) 1px, transparent 1.25px),
+            linear-gradient(145deg, rgba(255, 250, 239, 0.96), rgba(255, 239, 204, 0.94));
+          background-size: 18px 18px, 100% 100%;
         }
 
         .qw-tip {
